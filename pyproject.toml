@@ -1,13 +1,31 @@
 [project]
-name = "spearmint"
+name = "spearmint-framework"
 version = "0.1.0"
 description = "A Python framework for running rapid llm-based experiments"
 readme = "README.md"
 authors = [
     { name = "Bill DeRusha", email = "444835+bderusha@users.noreply.github.com" }
 ]
+license = {file = "LICENSE"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["llm", "ai", "experiments", "framework"]
 requires-python = ">=3.9"
 dependencies = []
+
+[project.urls]
+"Homepage" = "https://github.com/spearmint-framework/spearmint-framework"
+"Bug Tracker" = "https://github.com/spearmint-framework/spearmint-framework/issues"
 
 [project.optional-dependencies]
 dev = [
@@ -20,3 +38,6 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spearmint"]
