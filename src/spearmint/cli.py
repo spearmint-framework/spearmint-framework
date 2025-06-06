@@ -2,8 +2,10 @@
 from typing import Callable
 import argparse
 
+from .hypothesis import Hypothesis
 
-def cli(func: Callable) -> Callable:
+
+def cli(func: Callable, hypothesis: Hypothesis) -> Callable:
     """Decorator for creating a CLI command."""
     
     def wrapper(*args, **kwargs):
@@ -14,7 +16,7 @@ def cli(func: Callable) -> Callable:
         parsed_args = parser.parse_args(args)
         kwargs['experiment'] = parsed_args.experiment
         kwargs['config'] = parsed_args.config
-        
+
         return func(*args, **kwargs)
     
     return wrapper
