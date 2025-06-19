@@ -45,7 +45,8 @@ class Experiment:
 
         # check if the function takes an argument that matches the type of a registered service in self._service_fns
         if hasattr(self._run_fn, '__annotations__'):
-            for param_name, param_type in self._run_fn.__annotations__.items():
+            annotations = self._run_fn.__annotations__
+            for param_name, param_type in annotations.items() if annotations else []:
                 if param_type.__name__ in self._service_fns:
                     # If the parameter type matches a service, configure it
                     configured_kwargs[param_name] = self._service_fns[param_type.__name__]

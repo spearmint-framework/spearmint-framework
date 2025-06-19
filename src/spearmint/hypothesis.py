@@ -5,11 +5,13 @@ This module contains the Hypothesis class, which is the main entrypoint for crea
 and running experiments with the Spearmint framework.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union, TYPE_CHECKING
 import asyncio
+from .config import _generate_configurations
 
 # Import the Experiment type for type hints
-from . import Experiment
+if TYPE_CHECKING:
+    from .experiment import Experiment
 
 class Hypothesis:
     """
@@ -43,7 +45,7 @@ class Hypothesis:
         """
         pass
     
-    def add_experiment(self, experiment: Any, name: str) -> None:
+    def add_experiment(self, experiment: Experiment, name: str) -> None:
         """
         Add an experiment to the hypothesis with a specific name.
         
@@ -51,9 +53,11 @@ class Hypothesis:
             experiment: The experiment to add.
             name: The name to give the experiment.
         """
-        pass
+        if not isinstance(experiment, Experiment):
+            raise TypeError("Expected an instance of Experiment")
+        self._experiments[name] = experiment
     
-    async def run(self, experiment: Experiment, config: Optional[Dict[str, Any]] = None) -> Any:
+    async def run(self, experiment: "Experiment", config: Dict[str, Any]) -> Any:
         """
         Run an experiment with an optional configuration.
         
@@ -64,11 +68,18 @@ class Hypothesis:
         Returns:
             The result of running the experiment.
         """
-        for config in self.generate_configs(config):
+        experiment_variants = []
+        for config in _generate_configurations(config):
+            print(f"Running experiment with configuration: {config}")
             # Run the experiment with the provided configuration
-            result = await experiment(**config)
+            experiment_variants.append(experiment(**config))
             # Process the result as needed
-            return result
+
+        async_results = await asyncio.gather(*experiment_variants)
+
+        return async_results
+
+
     
     def input(self, input_class: Type[Any]) -> None:
         """
