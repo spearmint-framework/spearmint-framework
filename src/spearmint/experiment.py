@@ -28,6 +28,7 @@ class Experiment:
         self._service_fns = {}
         self._config_fns = {}
         self._middleware = []
+        self_results: List[dict] = []
         
     async def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """
@@ -41,20 +42,20 @@ class Experiment:
             The result of calling the run function. If the function is a 
             generator, returns the generator object.
         """
-        configured_kwargs = {}
+        # configured_kwargs = {}
 
-        # check if the function takes an argument that matches the type of a registered service in self._service_fns
-        if hasattr(self._run_fn, '__annotations__'):
-            annotations = self._run_fn.__annotations__
-            for param_name, param_type in annotations.items() if annotations else []:
-                if param_type.__name__ in self._service_fns:
-                    # If the parameter type matches a service, configure it
-                    configured_kwargs[param_name] = self._service_fns[param_type.__name__]
+        # # check if the function takes an argument that matches the type of a registered service in self._service_fns
+        # if hasattr(self._run_fn, '__annotations__'):
+        #     annotations = self._run_fn.__annotations__
+        #     for param_name, param_type in annotations.items() if annotations else []:
+        #         if param_type.__name__ in self._service_fns:
+        #             # If the parameter type matches a service, configure it
+        #             configured_kwargs[param_name] = self._service_fns[param_type.__name__]
 
         if inspect.isgeneratorfunction(self._run_fn):
-            return await self._call_generator(*args, **configured_kwargs)
+            return await self._call_generator(*args, **kwargs)
         else:
-            return await self._call_function(*args, **configured_kwargs)
+            return await self._call_function(*args, **kwargs)
     
     async def _call_function(self, *args: Any, **kwargs: Any) -> Any:
         """

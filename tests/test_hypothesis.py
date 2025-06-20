@@ -1,24 +1,7 @@
-# import asyncio
-# import spearmint as mint
-# from experiments import llm_extraction_exp, parse_document_exp
-
-# hypothesis = mint.Hypothesis()
-# hypothesis.configure("config.yaml")
-# hypothesis.add_service(AzureOpenAIClient)
-# hypothesis.add_experiment(llm_extraction_exp, name="llm_extraction")
-# hypothesis.add_experiment(parse_document_exp, name="parse_document")
-
-# @mint.cli(hypothesis)
-# async def main(experiment: mint.Experiment, config: dict) -> None:
-#     await hypothesis.run(experiment, config=config)
-
-# if __name__ == "__main__":
-#     asyncio.run(main())
-
 import pytest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 from spearmint.hypothesis import Hypothesis
+from spearmint.experiment import Experiment
 from spearmint.config import DynamicValue
 
 
@@ -30,10 +13,11 @@ async def test_hypothesis_run_static_config_calls_experiment_exactly_once():
     
     # Create a Hypothesis instance
     hypothesis = Hypothesis()
+    hypothesis.add_experiment(Experiment(mock_experiment), name="mock_experiment")
     
     # Run the experiment
     config = {"param": "value"}
-    result = await hypothesis.run(mock_experiment, config=config)
+    result = await hypothesis.run("mock_experiment", config=config)
     
     # Verify the experiment function was called exactly once
     mock_experiment.assert_called_once_with(**config)

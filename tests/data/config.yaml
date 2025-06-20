@@ -1,0 +1,7 @@
+services:
+  tests.test_e2e.MyClient:
+    __init__:
+      name: awesome_client
+      value: 2
+    process:
+      offset: 2

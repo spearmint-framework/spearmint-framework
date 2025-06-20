@@ -21,6 +21,9 @@ classifiers = [
 ]
 keywords = ["llm", "ai", "experiments", "framework"]
 requires-python = ">=3.9"
+dependencies = [
+    "pyyaml>=6.0.2",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/spearmint-framework/spearmint-framework"
@@ -38,9 +41,6 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
-
-[tool.uv]
-test = "pytest tests/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/spearmint"]

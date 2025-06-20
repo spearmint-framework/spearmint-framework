@@ -5,13 +5,18 @@ This module contains the Hypothesis class, which is the main entrypoint for crea
 and running experiments with the Spearmint framework.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Type, Union, TYPE_CHECKING
+import inspect
+import copy
+from typing import Any, Callable, Dict, List, Optional, Type, TypeVar, Union, TYPE_CHECKING
 import asyncio
 from .config import _generate_configurations
+from .experiment import Experiment
 
 # Import the Experiment type for type hints
 if TYPE_CHECKING:
     from .experiment import Experiment
+
+F = TypeVar('F', bound=Callable[..., Any])
 
 class Hypothesis:
     """
@@ -25,16 +30,42 @@ class Hypothesis:
         """Initialize a new Hypothesis instance."""
         self._experiments = {}
         self._services = []
-        self._config = {}
+        self._evaluators = []
+        self._dataset_handler = jsonl_handler
+        self.dataset = []
+        self._config_handler = yaml_handler
+        self.config = {}
+        self._inputs = {}
     
     def configure(self, config_path: str) -> None:
         """
-        Configure the hypothesis with settings from a YAML file.
+        Load configuration from a YAML file.
         
         Args:
             config_path: Path to the YAML configuration file.
         """
-        pass
+        self.config = self._config_handler(config_path)
+        
+
+    def load_dataset(self, dataset_path: str) -> None:
+        """
+        Specify a dataset for the hypothesis.
+        
+        Args:
+            dataset_path: Path to the dataset file.
+        """
+        self.dataset = self._dataset_handler(dataset_path)
+
+    def inputs(self, inputs: Dict[str, Any]) -> None:
+        """
+        Specify inputs for the hypothesis.
+        
+        Args:
+            inputs: A dictionary of inputs to use in the experiments.
+        """
+        if not isinstance(inputs, dict):
+            raise TypeError("Expected a dictionary for inputs")
+        self._inputs = inputs
     
     def add_service(self, service_class: Type[Any]) -> None:
         """
@@ -43,7 +74,21 @@ class Hypothesis:
         Args:
             service_class: The service class to add.
         """
-        pass
+        if not inspect.isclass(service_class):
+            raise TypeError(f"Expected a class for service. Got {type(service_class).__name__} ({service_class})")
+        
+        self._services.append(service_class)
+
+    def add_evaluator(self, evaluator: Callable[..., Any]) -> None:
+        """
+        Add an evaluator to the hypothesis.
+        
+        Args:
+            evaluator: The evaluator function to add.
+        """
+        if not callable(evaluator):
+            raise TypeError(f"Expected a callable for evaluator. Got {type(evaluator).__name__} ({evaluator})")
+        self._evaluators.append(evaluator)        
     
     def add_experiment(self, experiment: Experiment, name: str) -> None:
         """
@@ -56,8 +101,41 @@ class Hypothesis:
         if not isinstance(experiment, Experiment):
             raise TypeError("Expected an instance of Experiment")
         self._experiments[name] = experiment
+
+    def experiment_fn_decorator(self, name: Optional[str] = None) -> Callable[..., Any]:
+        """
+        Add an experiment function to the hypothesis.
+        
+        Args:
+            experiment_fn: The function that defines the experiment.
+            name: Optional name for the experiment. If not provided, the function's name will be used.
+            
+        Returns:
+            The original function (to support decorator usage).
+        """
+        def decorator(experiment_fn: F) -> Callable[..., Any]:
+            """
+            Decorator to add an experiment function to the hypothesis.
+            
+            Args:
+                experiment_fn: The function that defines the experiment.
+                name: Optional name for the experiment. If not provided, the function's name will be used.
+                
+            Returns:
+                The original function (to support decorator usage).
+            """
+            if not callable(experiment_fn):
+                raise TypeError(f"Expected a callable for experiment_fn. Got {type(experiment_fn).__name__} ({experiment_fn})")
+
+            local_name = name
+            if local_name is None:
+                local_name = experiment_fn.__name__
+
+            self.add_experiment(Experiment(experiment_fn), local_name)
+
+        return decorator
     
-    async def run(self, experiment: "Experiment", config: Dict[str, Any]) -> Any:
+    async def run(self, experiment_name: str, config: Dict[str, Any]) -> Any:
         """
         Run an experiment with an optional configuration.
         
@@ -68,42 +146,77 @@ class Hypothesis:
         Returns:
             The result of running the experiment.
         """
+        if experiment_name not in self._experiments:
+            raise ValueError(f"Experiment '{experiment_name}' not found in hypothesis")
+        experiment = self._experiments[experiment_name]
         experiment_variants = []
         for config in _generate_configurations(config):
-            print(f"Running experiment with configuration: {config}")
+            # print(f"Running experiment with configuration: {config}")
+            variant_dataset = copy.deepcopy(self.dataset)
+            for line in variant_dataset:
+                experiment_inputs = self._inputs.copy()
+                for key, value in self._inputs.items():
+                    experiment_inputs[key] = line.get(value)
+
+
+                # inspect the experiment signature to ensure all inputs are provided
+                full_arg_spec = inspect.getfullargspec(experiment._run_fn)
+                # print(full_arg_spec)
+                experiment_args = []
+                for arg in full_arg_spec.args:
+                    if arg in experiment_inputs:
+                        experiment_args.append(experiment_inputs.pop(arg))
+                    else:
+                        raise ValueError(f"Missing required input '{arg}' for experiment '{experiment_name}'")
+                
+                # print(f"Running experiment with args: {experiment_args} and config: {config}")
+                line["response"] = await experiment(*experiment_args, **config)
+            
             # Run the experiment with the provided configuration
-            experiment_variants.append(experiment(**config))
-            # Process the result as needed
-
-        async_results = await asyncio.gather(*experiment_variants)
-
-        return async_results
-
-
-    
-    def input(self, input_class: Type[Any]) -> None:
-        """
-        Define the input type for the hypothesis.
+            experiment_variants.append({ "config": config, "dataset": variant_dataset })
         
-        Args:
-            input_class: The input class/type.
-        """
-        pass
+        # Run all experiment variants concurrently
+        # parallel_tasks = []
+        # for variant in experiment_variants:
+        #     for line in variant["dataset"]:
+        #         parallel_tasks.append(line["response"])
+            
+        # await asyncio.gather(*parallel_tasks, return_exceptions=True)
+
+        for variant in experiment_variants:
+            for line in variant["dataset"]:
+                # Evaluate the response using all evaluators
+                for evaluator in self._evaluators:
+                    line[evaluator.__class__.__name__] = evaluator(**line)
+
+        return experiment_variants
     
-    def output(self, output_class: Type[Any]) -> None:
-        """
-        Define the output type for the hypothesis.
-        
-        Args:
-            output_class: The output class/type.
-        """
-        pass
+
+
+def jsonl_handler(file_path: str) -> List[Dict[str, Any]]:
+    """
+    Handler for reading JSON Lines files.
     
-    def data(self, data_path: str) -> None:
-        """
-        Specify a data source for the hypothesis.
+    Args:
+        file_path: Path to the JSON Lines file.
         
-        Args:
-            data_path: Path to the data file.
-        """
-        pass
+    Returns:
+        A list of dictionaries representing the JSON Lines data.
+    """
+    import json
+    with open(file_path, 'r') as f:
+        return [json.loads(line) for line in f]
+
+def yaml_handler(file_path: str) -> Dict[str, Any]:
+    """
+    Handler for reading YAML files.
+    
+    Args:
+        file_path: Path to the YAML file.
+        
+    Returns:
+        A dictionary representing the YAML data.
+    """
+    import yaml
+    with open(file_path, 'r') as f:
+        return yaml.safe_load(f)
