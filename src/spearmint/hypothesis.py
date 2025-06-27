@@ -26,9 +26,10 @@ class Hypothesis:
     running experiments with specific configurations.
     """
     
-    def __init__(self) -> None:
+    def __init__(self, name: str) -> None:
         """Initialize a new Hypothesis instance."""
         self._experiments = {}
+        self._configurables = {}
         self._services = []
         self._evaluators = []
         self._dataset_handler = jsonl_handler
@@ -102,6 +103,16 @@ class Hypothesis:
             raise TypeError("Expected an instance of Experiment")
         self._experiments[name] = experiment
 
+    def add_configurable(self, fn: Callable, name: str) -> None:
+        """
+        Add an experiment to the hypothesis with a specific name.
+        
+        Args:
+            experiment: The experiment to add.
+            name: The name to give the experiment.
+        """
+        self._configurables[name] = fn
+
     def experiment_fn_decorator(self, name: Optional[str] = None) -> Callable[..., Any]:
         """
         Add an experiment function to the hypothesis.
@@ -135,6 +146,77 @@ class Hypothesis:
 
         return decorator
     
+    def configurable_fn_decorator(self, name: Optional[str] = None) -> Callable[..., Any]:
+        """
+        Add an configurable function to the hypothesis.
+        
+        Args:
+            configurable_fn: The function that defines the configurable.
+            name: Optional name for the configurable. If not provided, the function's name will be used.
+            
+        Returns:
+            The original function (to support decorator usage).
+        """
+        print("init configurable_fn_decorator")
+        print(f"name: {name}")
+        def decorator(configurable_fn: F) -> Callable[..., Any]:
+            """
+            Decorator to add an configurable function to the hypothesis.
+            
+            Args:
+                configurable_fn: The function that defines the configurable.
+                name: Optional name for the configurable. If not provided, the function's name will be used.
+                
+            Returns:
+                The original function (to support decorator usage).
+            """
+            print("running decorator")
+            if not callable(configurable_fn):
+                raise TypeError(f"Expected a callable for configurable_fn. Got {type(configurable_fn).__name__} ({configurable_fn})")
+
+
+            # Create a new function with the same arg signature, but no kwargs that wraps the original function with the configuration
+            # this allows IDEs to show the signature without the configuration
+            def wrapped_fn(*args: Any, **kwargs: Any) -> Any:
+                """
+                Wrapped function that calls the original configurable function with the provided arguments and configuration.
+                
+                Args:
+                    *args: Positional arguments to pass to the configurable function.
+                    **kwargs: Keyword arguments to pass to the configurable function.
+                    
+                Returns:
+                    The result of calling the configurable function.
+                """
+                local_name = name
+                if local_name is None:
+                    local_name = configurable_fn.__name__
+                config_inputs = self.config.get(local_name, {})
+                fn_kwargs = {}
+                full_arg_spec = inspect.getfullargspec(configurable_fn)
+                for kwarg in full_arg_spec.kwonlyargs:
+                    if kwarg in config_inputs:
+                        fn_kwargs[kwarg] = config_inputs.get(kwarg)
+
+                # Merge the configuration into kwargs
+                merged_kwargs = {**fn_kwargs, **kwargs}
+                print(f"Running {configurable_fn.__name__} with args: {args} and kwargs: {merged_kwargs}")
+                result = configurable_fn(*args, **merged_kwargs)
+                return result
+            
+            # Set the name of the wrapped function to the original function's name
+            # wrapped_fn.__name__ = configurable_fn.__name__
+            # wrapped_fn.__doc__ = configurable_fn.__doc__
+
+            # update the arg spec of the wrapped function to match the original function
+            # wrapped_fn.__signature__ = inspect.signature(configurable_fn)
+
+            return wrapped_fn
+        
+
+
+        return decorator
+    
     async def run(self, experiment_name: str, config: Dict[str, Any]) -> Any:
         """
         Run an experiment with an optional configuration.
@@ -161,7 +243,7 @@ class Hypothesis:
 
                 # inspect the experiment signature to ensure all inputs are provided
                 full_arg_spec = inspect.getfullargspec(experiment._run_fn)
-                # print(full_arg_spec)
+                print(full_arg_spec)
                 experiment_args = []
                 for arg in full_arg_spec.args:
                     if arg in experiment_inputs:
@@ -169,9 +251,15 @@ class Hypothesis:
                     else:
                         raise ValueError(f"Missing required input '{arg}' for experiment '{experiment_name}'")
                 
+                fn_kwargs = {}
+                for kwarg in full_arg_spec.kwonlyargs:
+                    if kwarg in config:
+                        fn_kwargs[kwarg] = config.get(kwarg)
+                
                 # print(f"Running experiment with args: {experiment_args} and config: {config}")
-                line["response"] = await experiment(*experiment_args, **config)
-            
+                print(f"Running experiment {experiment_name} with args: {experiment_args} and config: {fn_kwargs}")
+                line["response"] = await experiment(*experiment_args, **fn_kwargs)
+                print("after run")
             # Run the experiment with the provided configuration
             experiment_variants.append({ "config": config, "dataset": variant_dataset })
         

@@ -22,10 +22,9 @@ load_dataset = hypothesis.load_dataset
 inputs = hypothesis.inputs
 add_evaluator = hypothesis.add_evaluator
 
-# TODO - register other functions as configurable
-# configurable = hypothesis.configurable
 
 # Decorators
+configurable = hypothesis.configurable_fn_decorator
 add_experiment = hypothesis.experiment_fn_decorator
 
 vary = DynamicValue

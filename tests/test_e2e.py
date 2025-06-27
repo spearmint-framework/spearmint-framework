@@ -19,6 +19,8 @@ def my_experiment(num: int, *, multiplier: int) -> int:
          result = -num
     else:
         result = num * multiplier
+
+    add_value(1)  # Example of using a configurable function
     
     print(f"Experiment run with num={num}, multiplier={multiplier}, result={result}")
     return result
@@ -73,7 +75,7 @@ class ExactMatchEvaluator:
 
 
 @pytest.mark.asyncio
-async def test_e2e():
+async def test_e2e_single_function():
     """Test that hypothesis.run calls the experiment function exactly once."""
     # Empty config yaml
     mint.configure("./tests/data/config.yaml")
@@ -98,7 +100,10 @@ async def test_e2e():
     mint.add_service(MyClient)
 
     runs = await mint.run("my_experiment", config={
-        "multiplier": mint.vary([1,2])
+        "multiplier": mint.vary([1,2]),
+        "add_value": {
+            "additional_value": 10
+        },
     })
 
     assert len(runs) == 2
@@ -141,14 +146,37 @@ async def test_e2e():
         {"number":4, "expected": 8, "response": 8, "ExactMatchEvaluator": { "exact_match": True}}      # 4 * 2 = 8
     ]
 
-    chained_runs = await mint.run("chained_experiment", config={
-        "add_value": {
-            "additional_value": 0
-        },
-        "multiply_value": {
-            "multiplier": 1
-        },
-        "some_tool": {
-            "offset": 10,
-        }
-    })
+    assert False
+
+
+# @pytest.mark.asyncio
+# async def test_e2e_chained_function():
+#     chained_runs = await mint.run("chained_experiment", config={
+#         "add_value": {
+#             "additional_value": 0
+#         },
+#         "multiply_value": {
+#             "multiplier": 1
+#         },
+#         "some_tool": {
+#             "offset": 10,
+#         }
+#     })
+
+#     for run in chained_runs:
+#         print(f"\n\nRun config: {run['config']}")
+#         for line in run["dataset"]:
+#             print(f"Dataset line: {line}")
+
+#         assert run["dataset"] == [
+#             {"number":-1, "expected": 1, "response": -1, "ExactMatchEvaluator": { "exact_match": False}}, # abs(-1) = 1
+#             {"number":2, "expected": 4, "response": 2, "ExactMatchEvaluator": { "exact_match": False}},  # 2 * 1 = 2
+#             {"number":-2, "expected": 2, "response": -2, "ExactMatchEvaluator": { "exact_match": False}}, # abs(-2) = 2
+#             {"number":3, "expected": 6, "response": 3, "ExactMatchEvaluator": { "exact_match": False}},  # 3 * 1 = 3
+#             {"number":-4, "expected": 4, "response": -4, "ExactMatchEvaluator": { "exact_match": False}}, # abs(-4) = 4
+#             {"number":1, "expected": 2, "response": 1, "ExactMatchEvaluator": { "exact_match": False}},   # 1 * 1 = 1
+#             {"number":0, "expected": 0, "response": 0, "ExactMatchEvaluator": { "exact_match": True}},   # 0 * 1 = 0
+#             {"number":5, "expected": 10, "response": 5, "ExactMatchEvaluator": { "exact_match": False}},   # 5 * 1 = 5
+#             {"number":-3, "expected": 3, "response": -3, "ExactMatchEvaluator": { "exact_match": False}}, # abs(-3) = 3
+#             {"number":4, "expected": 8, "response": 4, "ExactMatchEvaluator": { "exact_match": False}}    # 4 * 1 = 4
+#         ]
