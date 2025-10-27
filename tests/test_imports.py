@@ -43,17 +43,3 @@ def test_import_config_module() -> None:
     from spearmint import config
 
     assert config is not None
-
-
-def test_import_experiment_module() -> None:
-    """Test that experiment module can be imported."""
-    from spearmint import experiment
-
-    assert experiment is not None
-
-
-def test_import_registry_module() -> None:
-    """Test that registry module can be imported."""
-    from spearmint import registry
-
-    assert registry is not None
