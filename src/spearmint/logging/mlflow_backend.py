@@ -55,7 +55,7 @@ class MLflowLogger(LoggerBackend):
     ) -> None:
         if mlflow is None:  # pragma: no cover - safety path
             raise ImportError(
-                "MLflow is not installed. Install with 'pip install spearmint-framework[mlflow]'"
+                "MLflow is not installed. Install with 'uv add spearmint-framework[mlflow]'"
             ) from _IMPORT_ERROR
 
         if tracking_uri:

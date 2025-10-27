@@ -65,11 +65,9 @@ class Spearmint:
             def swrapper(*args: Any, **kwargs: Any) -> Any:
                 try:
                     loop = asyncio.get_running_loop()
+                    return loop.run_until_complete(awrapper(*args, **kwargs))
                 except RuntimeError:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-
-                return loop.run_until_complete(awrapper(*args, **kwargs))
+                    return asyncio.run(awrapper(*args, **kwargs))
 
             return awrapper if inspect.iscoroutinefunction(func) else swrapper
 

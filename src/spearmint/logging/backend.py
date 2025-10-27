@@ -2,6 +2,12 @@
 
 This module defines the `LoggerBackend` protocol used by all logging backends.
 Separated from concrete implementations to keep dependencies minimal.
+
+TODO:
+- Drop logger implementation
+- Replace with tracing instead
+    (e.g., OpenTelemetry) for more flexible logging?
+    https://mlflow.org/docs/latest/genai/tracing/track-environments-context/#programmatic-analysis
 """
 
 from __future__ import annotations

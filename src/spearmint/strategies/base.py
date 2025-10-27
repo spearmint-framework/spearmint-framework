@@ -7,6 +7,7 @@ perform a single branch execution and logging lifecycle.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any, Protocol
 
@@ -72,7 +73,10 @@ async def _execute_branch(
         logger.log_params(config_id, config)
 
     try:
-        result = await func(*args, config=config, **kwargs)
+        if inspect.iscoroutinefunction(func):
+            result = await func(*args, config=config, **kwargs)
+        else:
+            result = func(*args, config=config, **kwargs)
         branch.mark_success(result)
         if logger is not None and branch.duration is not None:
             logger.log_metrics(config_id, {"duration": branch.duration})
