@@ -3,6 +3,7 @@
 import pytest
 
 from spearmint.branch import BranchContainer
+from spearmint.config.config import Config
 from spearmint.strategies import MultiBranchStrategy
 
 
@@ -10,14 +11,14 @@ class TestMultiBranchStrategy:
     """Test MultiBranchStrategy execution patterns."""
 
     @pytest.mark.asyncio
-    async def test_multi_branch_all_success(self, sample_configs):
+    async def test_multi_branch_all_success(self, sample_config_models):
         """MultiBranchStrategy should execute all configs and return BranchContainer."""
         strategy = MultiBranchStrategy()
 
-        async def sample_func(x: int, config: dict) -> int:
-            return x + config["delta"]
+        async def sample_func(x: int, config: Config) -> int:
+            return x + config.delta
 
-        result = await strategy.run(sample_func, sample_configs, 10)
+        result = await strategy.run(sample_func, sample_config_models, 10)
 
         assert isinstance(result, BranchContainer)
         assert len(result) == 3
@@ -30,16 +31,16 @@ class TestMultiBranchStrategy:
         assert outputs == [11, 15, 20]  # 10+1, 10+5, 10+10
 
     @pytest.mark.asyncio
-    async def test_multi_branch_mixed_failures(self, sample_configs):
+    async def test_multi_branch_mixed_failures(self, sample_config_models):
         """MultiBranchStrategy should capture both success and failure."""
         strategy = MultiBranchStrategy()
 
-        async def mixed_func(x: int, config: dict) -> int:
-            if config["delta"] == 5:
+        async def mixed_func(x: int, config: Config) -> int:
+            if config.delta == 5:
                 raise ValueError("Intentional failure")
-            return x + config["delta"]
+            return x + config.delta
 
-        result = await strategy.run(mixed_func, sample_configs, 10)
+        result = await strategy.run(mixed_func, sample_config_models, 10)
 
         assert len(result) == 3
 
@@ -58,67 +59,70 @@ class TestMultiBranchStrategy:
         """MultiBranchStrategy should raise ValueError for empty configs."""
         strategy = MultiBranchStrategy()
 
-        async def sample_func(x: int, config: dict) -> int:
+        async def sample_func(x: int, config: Config) -> int:
             return x
 
         with pytest.raises(ValueError, match="requires at least one config"):
             await strategy.run(sample_func, [], 10)
 
     @pytest.mark.asyncio
-    async def test_multi_branch_single_config(self, single_config):
+    async def test_multi_branch_single_config(self, single_config_model):
         """MultiBranchStrategy should work with single config."""
         strategy = MultiBranchStrategy()
 
-        async def sample_func(x: int, config: dict) -> int:
-            return x + config["delta"]
+        async def sample_func(x: int, config: Config) -> int:
+            return x + config.delta
 
-        result = await strategy.run(sample_func, single_config, 10)
+        result = await strategy.run(sample_func, single_config_model, 10)
 
         assert len(result) == 1
         assert result[0].status == "success"
         assert result[0].output == 15
 
     @pytest.mark.asyncio
-    async def test_multi_branch_all_failures(self, sample_configs):
+    async def test_multi_branch_all_failures(self, sample_config_models):
         """MultiBranchStrategy should handle all branches failing."""
         strategy = MultiBranchStrategy()
 
-        async def failing_func(x: int, config: dict) -> int:
+        async def failing_func(x: int, config: Config) -> int:
             raise ValueError(f"Failure with delta {config['delta']}")
 
-        result = await strategy.run(failing_func, sample_configs, 10)
+        result = await strategy.run(failing_func, sample_config_models, 10)
 
         assert len(result) == 3
         assert all(b.status == "failed" for b in result)
         assert all(b.exception_info is not None for b in result)
 
     @pytest.mark.asyncio
-    async def test_multi_branch_preserves_config_order(self, sample_configs):
+    async def test_multi_branch_preserves_config_order(self, sample_config_models):
         """MultiBranchStrategy should preserve config order in results."""
         strategy = MultiBranchStrategy()
 
-        async def sample_func(x: int, config: dict) -> int:
-            return x + config["delta"]
+        async def sample_func(x: int, config: Config) -> int:
+            return x + config.delta
 
-        result = await strategy.run(sample_func, sample_configs, 10)
+        result = await strategy.run(sample_func, sample_config_models, 10)
 
         # Check config_ids reflect order
-        assert result[0].config == {"delta": 1, "multiplier": 2}
-        assert result[1].config == {"delta": 5, "multiplier": 3}
-        assert result[2].config == {"delta": 10, "multiplier": 1}
+        assert result[0].config[0].delta == 1
+        assert result[0].config[0].multiplier == 2
+        assert result[1].config[0].delta == 5
+        assert result[1].config[0].multiplier == 3
+        assert result[2].config[0].delta == 10
+        assert result[2].config[0].multiplier == 1
 
     @pytest.mark.asyncio
-    async def test_multi_branch_concurrent_execution(self, sample_configs):
+    async def test_multi_branch_concurrent_execution(self, sample_config_models):
         """MultiBranchStrategy should execute branches concurrently."""
         strategy = MultiBranchStrategy()
         execution_order = []
 
-        async def tracking_func(x: int, config: dict) -> int:
-            execution_order.append(config["delta"])
+        async def tracking_func(x: int, config: Config) -> int:
+            execution_order.append(config.delta)
             # All start roughly at the same time
-            return x + config["delta"]
+            return x + config.delta
 
-        await strategy.run(tracking_func, sample_configs, 10)
+        await strategy.run(tracking_func, sample_config_models, 10)
 
         # All should have executed (can't strictly test concurrency,
         # but we verify all executed)

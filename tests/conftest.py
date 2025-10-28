@@ -2,6 +2,8 @@
 
 import pytest
 
+from spearmint.config.config import Config
+
 
 @pytest.fixture
 def event_loop_policy() -> None:
@@ -24,6 +26,22 @@ def sample_configs() -> list[dict[str, int]]:
 def single_config() -> list[dict[str, int]]:
     """Fixture providing a single configuration."""
     return [{"delta": 5, "multiplier": 2}]
+
+
+@pytest.fixture
+def single_config_model() -> list[list[Config]]:
+    """Fixture providing a single configuration as a Pydantic model."""
+    return [[Config(delta=5, multiplier=2)]]
+
+
+@pytest.fixture
+def sample_config_models() -> list[list[Config]]:
+    """Fixture providing a single configuration as a Pydantic model."""
+    return [
+        [Config(delta=1, multiplier=2)],
+        [Config(delta=5, multiplier=3)],
+        [Config(delta=10, multiplier=1)],
+    ]
 
 
 @pytest.fixture
