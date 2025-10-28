@@ -5,40 +5,39 @@ A framework for experimentation with LLMs and document processing.
 
 import asyncio
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from copy import deepcopy
 from functools import wraps
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar
+
+from pydantic import BaseModel
 
 from .branch import Branch, BranchContainer
+from .config.config import Config
 from .strategies import Strategy
 from .utils.handlers import jsonl_handler, yaml_handler
+
+TModel = TypeVar("TModel", bound=BaseModel, covariant=True)
+R = TypeVar("R")
 
 # from .experiment import experiment as experiment_decorator
 __version__ = "0.1.0"
 
 
-class Spearmint:
+class Spearmint(Generic[TModel]):
     """Main Spearmint class for managing experiments and strategies."""
 
     def __init__(self) -> None:
         self.strategy: Strategy | None = None
         self.configs: list[dict[str, Any]] = []
-        self._config_handler: Callable[[str | Path], list[dict[str, Any]]] = (
-            yaml_handler
-        )
-        self._dataset_handler: Callable[[str | Path], list[dict[str, Any]]] = (
-            jsonl_handler
-        )
+        self._config_handler: Callable[[str | Path], list[dict[str, Any]]] = yaml_handler
+        self._dataset_handler: Callable[[str | Path], list[dict[str, Any]]] = jsonl_handler
         self._evaluators: list[Callable[..., Any]] = []
 
     def get_config(self) -> dict[str, Any]:
         """Get the next configuration from the config pool."""
         return {}
-
-    def set_strategy(self, strategy: Strategy) -> None:
-        """Set the experiment execution strategy."""
-        self.strategy = strategy
 
     def load_config(self, config_path: str | Path) -> None:
         """
@@ -47,7 +46,7 @@ class Spearmint:
         Args:
             config_path: str or Path to the YAML configuration file.
         """
-        self.config = self._config_handler(config_path)
+        self.configs = self._config_handler(config_path)
 
     def load_dataset(self, dataset_path: str | Path) -> None:
         """
@@ -58,26 +57,61 @@ class Spearmint:
         """
         self.dataset = self._dataset_handler(dataset_path)
 
+    def _resolve_config(self, bind_path: str, model_cls: type[TModel]) -> list[TModel]:
+        """Resolve a configuration model from the bind path.
+
+        Args:
+            bind_path: Dot-separated path to the configuration in the loaded configs.
+        Returns:
+            An instance of the configuration model.
+        """
+        parts = bind_path.split(".")
+        configs = [deepcopy(c) for c in self.configs]
+        model_configs = []
+        for config_data in configs:
+            for part in parts:
+                if not part:
+                    continue
+                if part in config_data:
+                    config_data = config_data[part]
+                else:
+                    raise ValueError(f"Key '{part}' not found in bind path '{bind_path}'")
+
+            model_configs.append(model_cls.model_validate(config_data))
+
+        return model_configs
+
     def experiment(
-        self, strategy: Strategy | None = None
+        self,
+        strategy: Strategy | None = None,
+        model_cls_map: Mapping[str, type[TModel]] = {"": Config},
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator for wrapping functions with experiment execution strategy.
 
-        This decorator wraps an async function and orchestrates its execution
-        through the provided strategy, handling config injection and logging.
+                This decorator wraps an async function and orchestrates its execution
+                through the provided strategy, handling config injection and logging.
 
-        Args:
-            strategy: Strategy instance to use for execution
+                Args:
+                    strategy: Strategy instance to use for execution
 
-        Returns:
-            Decorator function
+                Returns:
+                    Decorator function
 
-        Example:
-            >>> @experiment()
-            >>> async def my_func(x: int, config: dict) -> int:
-            ...     return x + config['delta']
-            >>>
-            >>> result = await my_func(10)
+                Example:
+                    >>> @experiment()
+                    >>> async def my_func(x: int, config: dict) -> int:
+                    ...     return x + config['delta']
+                    >>>
+                    >>> result = await my_func(10)
+
+
+        def inject_model(model_cls: type[TModel]) -> Callable[[Callable[[str, TModel, int | None], R]], Callable[[str, int | None], R]]:
+            def decorator(fn: Callable[[str, TModel, int | None], R]) -> Callable[[str, int | None], R]:
+                def wrapper(text: str, max_length: int | None = 150) -> R:
+                    model_cfg = resolve_model(model_cls)  # implement this
+                    return fn(text, model_cfg, max_length)
+                return wrapper
+            return decorator
         """
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -85,10 +119,16 @@ class Spearmint:
             async def awrapper(*args: Any, **kwargs: Any) -> Any:
                 selected_strategy = strategy or self.strategy
                 if selected_strategy is None:
-                    raise ValueError(
-                        "Experiment strategy is not set. Use 'set_strategy' first."
-                    )
-                return await selected_strategy.run(func, self.configs, *args, **kwargs)
+                    raise ValueError("Experiment strategy is not set. Use 'set_strategy' first.")
+
+                model_cfgs = [
+                    self._resolve_config(bind_path, model_cls)
+                    for bind_path, model_cls in model_cls_map.items()
+                ]
+                # transpose list of lists
+                model_cfgs = [list(t) for t in zip(*model_cfgs, strict=True)]
+
+                return await selected_strategy.run(func, model_cfgs, *args, **kwargs)
 
             @wraps(func)
             def swrapper(*args: Any, **kwargs: Any) -> Any:
@@ -121,10 +161,14 @@ class Spearmint:
 
         if inspect.iscoroutinefunction(func):
 
-            async def runner():
+            async def runner() -> None:
                 # TODO: parallelize options
                 for data_line in self.dataset:
-                    await func(data_line)
+                    kwargs = {}
+                    for param in inspect.signature(func).parameters.keys():
+                        if param in data_line:
+                            kwargs[param] = data_line[param]
+                    await func(**kwargs)
 
             try:
                 loop = asyncio.get_running_loop()

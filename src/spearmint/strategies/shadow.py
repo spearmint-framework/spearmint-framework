@@ -10,13 +10,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any
+from typing import Any, Generic
 
-from ..logging import LoggerBackend
-from .base import _execute_branch
+from .base import TModel, _execute_branch
 
 
-class ShadowStrategy:
+class ShadowStrategy(Generic[TModel]):
     """Execute primary config foreground, others as shadows.
 
     Returns the primary config result immediately while scheduling shadow
@@ -32,9 +31,8 @@ class ShadowStrategy:
     async def run(
         self,
         func: Callable[..., Awaitable[Any]],
-        configs: Sequence[dict[str, Any]],
+        configs: Sequence[TModel],
         *args: Any,
-        logger: LoggerBackend | None = None,
         **kwargs: Any,
     ) -> Any:
         """Execute primary config foreground, schedule shadows in background.
@@ -43,7 +41,6 @@ class ShadowStrategy:
             func: Async function to execute
             configs: Sequence of configuration dictionaries
             *args: Positional arguments to pass to func
-            logger: Optional logger backend
             **kwargs: Keyword arguments to pass to func
 
         Returns:
@@ -62,7 +59,7 @@ class ShadowStrategy:
         primary_config = configs[self.primary_index]
         primary_config_id = f"shadow_primary_{self.primary_index}"
         primary_branch = await _execute_branch(
-            func, primary_config, primary_config_id, logger, *args, **kwargs
+            func, primary_config, primary_config_id, *args, **kwargs
         )
 
         self._shadow_tasks = []
@@ -70,7 +67,7 @@ class ShadowStrategy:
             if i != self.primary_index:
                 config_id = f"shadow_{i}"
                 task = asyncio.create_task(
-                    _execute_branch(func, config, config_id, logger, *args, **kwargs)
+                    _execute_branch(func, config, config_id, *args, **kwargs)
                 )
                 self._shadow_tasks.append(task)
 

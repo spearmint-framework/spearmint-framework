@@ -16,7 +16,11 @@ from pathlib import Path
 from typing import Any
 
 import yaml  # type: ignore[import-untyped]
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+
+class Config(BaseModel):
+    model_config = ConfigDict(extra="allow")
 
 
 def generate_config_id(config: dict[str, Any]) -> str:

@@ -7,13 +7,12 @@ provided list of configs.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any
+from typing import Any, Generic
 
-from ..logging import LoggerBackend
-from .base import _execute_branch
+from .base import TModel, _execute_branch
 
 
-class RoundRobinStrategy:
+class RoundRobinStrategy(Generic[TModel]):
     """Strategy that cycles through configs sequentially on each execution.
 
     Maintains an internal index that rotates through the config list,
@@ -26,9 +25,8 @@ class RoundRobinStrategy:
     async def run(
         self,
         func: Callable[..., Awaitable[Any]],
-        configs: Sequence[dict[str, Any]],
+        configs: Sequence[Sequence[TModel]],
         *args: Any,
-        logger: LoggerBackend | None = None,
         **kwargs: Any,
     ) -> Any:
         """Execute function with the next config in rotation.
@@ -37,7 +35,6 @@ class RoundRobinStrategy:
             func: Async function to execute
             configs: Sequence of configuration dictionaries
             *args: Positional arguments to pass to func
-            logger: Optional logger backend
             **kwargs: Keyword arguments to pass to func
 
         Returns:
@@ -51,7 +48,7 @@ class RoundRobinStrategy:
 
         config = configs[self._index]
         config_id = f"round_robin_{self._index}"
-        branch = await _execute_branch(func, config, config_id, logger, *args, **kwargs)
+        branch = await _execute_branch(func, config, config_id, *args, **kwargs)
 
         self._index = (self._index + 1) % len(configs)
 

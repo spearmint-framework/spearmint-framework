@@ -16,15 +16,19 @@ TODO:
 
 import time
 import traceback as tb
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Generic, TypeVar
+
+from pydantic import BaseModel
 
 from .types import ExceptionInfo, Status
 
+TModel = TypeVar("TModel", bound=BaseModel)
+
 
 @dataclass
-class Branch:
+class Branch(Generic[TModel]):
     """Represents a single execution branch of an experiment.
 
     A Branch tracks the configuration, execution timing, status, output,
@@ -32,15 +36,15 @@ class Branch:
     """
 
     config_id: str
-    config: dict[str, Any]
+    config: Sequence[TModel]
     start_ts: float
-    end_ts: Optional[float] = None
+    end_ts: float | None = None
     status: Status = "pending"
     output: Any = None
-    exception_info: Optional[ExceptionInfo] = None
+    exception_info: ExceptionInfo | None = None
 
     @classmethod
-    def start(cls, config_id: str, config: dict[str, Any]) -> "Branch":
+    def start(cls, config_id: str, config: Sequence[TModel]) -> "Branch[TModel]":
         """Create a new Branch with initialized start timestamp.
 
         Args:
@@ -57,7 +61,7 @@ class Branch:
         )
 
     @property
-    def duration(self) -> Optional[float]:
+    def duration(self) -> float | None:
         """Calculate execution duration in seconds.
 
         Returns:
@@ -114,7 +118,7 @@ class Branch:
         self,
         status: Status,
         output: Any = None,
-        exception_info: Optional[ExceptionInfo] = None,
+        exception_info: ExceptionInfo | None = None,
     ) -> None:
         """Internal method to finalize branch state.
 
@@ -161,13 +165,13 @@ class Branch:
         }
 
 
-class BranchContainer:
+class BranchContainer(Generic[TModel]):
     """Container for managing collections of Branch instances.
 
     Provides iteration, indexing, and filtering capabilities for branch collections.
     """
 
-    def __init__(self, branches: list[Branch]) -> None:
+    def __init__(self, branches: list[Branch[TModel]]) -> None:
         """Initialize container with list of branches.
 
         Args:
@@ -175,7 +179,7 @@ class BranchContainer:
         """
         self.branches = branches
 
-    def __iter__(self) -> Iterator[Branch]:
+    def __iter__(self) -> Iterator[Branch[TModel]]:
         """Allow iteration over branches."""
         return iter(self.branches)
 
@@ -183,7 +187,7 @@ class BranchContainer:
         """Return number of branches in container."""
         return len(self.branches)
 
-    def __getitem__(self, index: int) -> Branch:
+    def __getitem__(self, index: int) -> Branch[TModel]:
         """Allow indexing into branch collection.
 
         Args:
@@ -194,7 +198,7 @@ class BranchContainer:
         """
         return self.branches[index]
 
-    def successful(self) -> list[Branch]:
+    def successful(self) -> list[Branch[TModel]]:
         """Filter and return only successful branches.
 
         Returns:
@@ -202,7 +206,7 @@ class BranchContainer:
         """
         return [b for b in self.branches if b.status == "success"]
 
-    def failed(self) -> list[Branch]:
+    def failed(self) -> list[Branch[TModel]]:
         """Filter and return only failed branches.
 
         Returns:
@@ -210,7 +214,7 @@ class BranchContainer:
         """
         return [b for b in self.branches if b.status == "failed"]
 
-    def by_config_id(self, config_id: str) -> Optional[Branch]:
+    def by_config_id(self, config_id: str) -> Branch[TModel] | None:
         """Find branch by configuration ID.
 
         Args:
@@ -224,7 +228,7 @@ class BranchContainer:
                 return branch
         return None
 
-    def add(self, branch: Branch) -> None:
+    def add(self, branch: Branch[TModel]) -> None:
         """Add a branch to the container.
 
         Args:
@@ -233,4 +237,4 @@ class BranchContainer:
         self.branches.append(branch)
 
 
-__all__ = ["Branch", "BranchContainer"]
+__all__ = ["Branch", "BranchContainer", "TModel"]
