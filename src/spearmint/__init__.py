@@ -5,13 +5,15 @@ A framework for experimentation with LLMs and document processing.
 
 import asyncio
 import inspect
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from functools import wraps
 from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
+
+from spearmint.config.dynamic_value import _generate_configurations
 
 from .branch import Branch, BranchContainer
 from .config.config import Config
@@ -47,6 +49,19 @@ class Spearmint(Generic[TModel]):
             config_path: str or Path to the YAML configuration file.
         """
         self.configs = self._config_handler(config_path)
+
+    # TODO: TEST THIS
+    def add_config(self, *args: Sequence[BaseModel]) -> None:
+        """
+        Manually set configurations.
+
+        Args:
+            *args: Variable number of configuration dictionaries.
+        """
+        for cfg in args:
+            if not isinstance(cfg, BaseModel):
+                continue
+            self.configs.extend(_generate_configurations(cfg.model_dump()))
 
     def load_dataset(self, dataset_path: str | Path) -> None:
         """

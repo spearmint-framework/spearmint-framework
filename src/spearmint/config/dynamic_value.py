@@ -1,5 +1,6 @@
 import itertools
-from typing import Any, Generic, Iterable, TypeVar
+from collections.abc import Iterable
+from typing import Any, Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -44,10 +45,7 @@ def _generate_configurations(config: dict[str, Any]) -> list[dict[str, Any]]:
     for dynamic_value_mapping in dynamic_value_maps:
         value_iterable = dynamic_value_mapping["dynamic_value"]
         values.append(
-            [
-                {"keys": dynamic_value_mapping["parent_keys"], "value": val}
-                for val in value_iterable
-            ]
+            [{"keys": dynamic_value_mapping["parent_keys"], "value": val} for val in value_iterable]
         )
 
     # use itertools to generate all combinations of the sweeper values
@@ -66,9 +64,7 @@ def _generate_configurations(config: dict[str, Any]) -> list[dict[str, Any]]:
     return configurations
 
 
-def _find_dynamic_values(
-    config: dict[str, Any], parent_keys: list = []
-) -> list[dict[str, Any]]:
+def _find_dynamic_values(config: dict[str, Any], parent_keys: list = []) -> list[dict[str, Any]]:
     """Find all dynamic_values in the configuration.
 
     Args:
