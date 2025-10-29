@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any, Generic
+from typing import Any
 
-from .base import TModel, _execute_branch
+from .base import Strategy
 
 
-class ShadowStrategy(Generic[TModel]):
+class ShadowStrategy(Strategy):
     """Execute primary config foreground, others as shadows.
 
     Returns the primary config result immediately while scheduling shadow

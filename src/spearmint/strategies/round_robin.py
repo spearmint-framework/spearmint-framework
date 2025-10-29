@@ -6,26 +6,27 @@ provided list of configs.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Sequence
-from typing import Any, Generic
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from .base import TModel, _execute_branch
+from .base import Strategy
 
 
-class RoundRobinStrategy(Generic[TModel]):
+class RoundRobinStrategy(Strategy):
     """Strategy that cycles through configs sequentially on each execution.
 
     Maintains an internal index that rotates through the config list,
     executing one config per call and returning its output directly.
     """
 
-    def __init__(self) -> None:  # noqa: D401
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize the RoundRobinStrategy instance."""
+        super().__init__(*args, **kwargs)
         self._index = 0
 
     async def run(
         self,
         func: Callable[..., Awaitable[Any]],
-        configs: Sequence[Sequence[TModel]],
         *args: Any,
         **kwargs: Any,
     ) -> Any:
@@ -43,14 +44,15 @@ class RoundRobinStrategy(Generic[TModel]):
         Raises:
             ValueError: If configs is empty
         """
-        if not configs:
+        if not self.configs:
             raise ValueError("RoundRobinStrategy requires at least one config")
 
-        config = configs[self._index]
-        config_id = f"round_robin_{self._index}"
-        branch = await _execute_branch(func, config, config_id, *args, **kwargs)
+        config = self.configs[self._index]
+        config_id = self._generate_config_id(config)
+        bound_configs = self._bind_config(config)
+        branch = await self._execute_branch(func, bound_configs, config_id, *args, **kwargs)
 
-        self._index = (self._index + 1) % len(configs)
+        self._index = (self._index + 1) % len(self.configs)
 
         if branch.status == "failed" and branch.exception_info is not None:
             exc_type = branch.exception_info["type"]

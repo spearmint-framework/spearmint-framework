@@ -1,6 +1,6 @@
 """Base strategy protocol and branch execution helper (generic).
 
-Defines the generic `Strategy[TModel]` Protocol that all execution strategies
+Defines the generic `Strategy` Protocol that all execution strategies
 must implement, along with the internal `_execute_branch` helper used by
 concrete strategies to perform a single branch execution and logging lifecycle.
 
@@ -11,29 +11,35 @@ strategies operate on validated configuration models rather than raw
 
 from __future__ import annotations
 
+import hashlib
 import inspect
-from collections.abc import Awaitable, Callable, Sequence
-from typing import Any, Generic, Protocol, TypeVar, Union
+import json
+from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
+from copy import deepcopy
+from typing import Any, Union
 
 import mlflow
 from pydantic import BaseModel
 
 from ..branch import Branch
+from ..config.config import Config
 
-TModel = TypeVar("TModel", bound=BaseModel)
 
+class Strategy(ABC):
+    """Abstract base class for execution strategies."""
 
-class Strategy(Protocol, Generic[TModel]):
-    """Protocol defining the interface for experiment execution strategies.
+    def __init__(
+        self, configs: list[dict[str, Any]], bindings: dict[type[BaseModel], str] | None = None
+    ) -> None:
+        """Initialize the strategy instance."""
+        self.configs = configs
+        self.bindings = bindings or {Config: ""}
 
-    Implementations receive a sequence of validated configuration model
-    instances (``Sequence[TModel]``) instead of raw dicts.
-    """
-
+    @abstractmethod
     async def run(
         self,
         func: Callable[..., Awaitable[Any]],
-        configs: Sequence[TModel],
         *args: Any,
         **kwargs: Any,
     ) -> Any:  # pragma: no cover - protocol definition only
@@ -50,77 +56,119 @@ class Strategy(Protocol, Generic[TModel]):
         """
         ...
 
+    def _bind_config(self, config: dict[str, Any]) -> list[BaseModel]:
+        """Bind configs to model classes based on provided bindings.
 
-async def _execute_branch(
-    func: Callable[..., Awaitable[Any]],
-    config: Sequence[TModel],
-    config_id: str,
-    *args: Any,
-    **kwargs: Any,
-) -> Branch:
-    """Execute function with a single config and return a Branch with results.
+        This method can be used to map configuration model instances
+        to function parameters based on type annotations or explicit
+        bindings.
+        """
+        bound_configs = []
 
-    This helper manages the full branch lifecycle: creation, execution,
-    logging, and status tracking.
+        config_data = deepcopy(config)
+        for model_cls, bind_path in self.bindings.items():
+            parts = bind_path.split(".")
+            for part in parts:
+                if not part:
+                    continue
+                if part in config_data:
+                    config_data = config_data[part]
+                else:
+                    raise ValueError(f"Key '{part}' not found in bind path '{bind_path}'")
 
-    Args:
-        func: Async function to execute
-        config: Configuration dictionary for this execution
-        config_id: Unique identifier for this config
-        logger: Optional logger backend
-        *args: Positional arguments to pass to func
-        **kwargs: Keyword arguments to pass to func
+            bound_configs.append(model_cls.model_validate(config_data))
 
-    Returns:
-        Branch instance with execution results
-    """
-    # Normalize config for Branch storage (store original model instance)
-    branch = Branch.start(config_id, config)
-    print(f"Starting branch {config_id}")
+        return bound_configs
 
-    func = mlflow.trace(func, span_type="experiment_branch", attributes={"config_id": config_id})
+    def _generate_config_id(self, config: dict[str, Any]) -> str:
+        """Generate a unique config ID based on the config and index.
 
-    inspect_signature = inspect.signature(func)
-    remaining_configs = list(config)
-    for param in inspect_signature.parameters.values():
-        # Inject config if annotation matches config model class or uses a generic name like 'config'
-        for subconfig in remaining_configs[:]:
-            if any(
-                [
+        Args:
+            config: Configuration dictionary
+            index: Index of the config in the list
+        Returns:
+            Unique configuration ID as a string
+        """
+
+        if "config_id" in config:
+            return str(config["config_id"])
+
+        # Otherwise, compute hash from normalized content
+        # Sort keys for deterministic ordering
+        normalized = json.dumps(config, sort_keys=True, default=str)
+        hash_obj = hashlib.sha256(normalized.encode("utf-8"))
+        return hash_obj.hexdigest()[:16]  # Use first 16 chars for brevity
+
+    async def _execute_branch(
+        self,
+        func: Callable[..., Awaitable[Any]],
+        config: list[BaseModel],
+        config_id: str,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Branch:
+        """Execute function with a single config and return a Branch with results.
+
+        This helper manages the full branch lifecycle: creation, execution,
+        logging, and status tracking.
+
+        Args:
+            func: Async function to execute
+            config: Configuration dictionary for this execution
+            config_id: Unique identifier for this config
+            logger: Optional logger backend
+            *args: Positional arguments to pass to func
+            **kwargs: Keyword arguments to pass to func
+
+        Returns:
+            Branch instance with execution results
+        """
+        # Normalize config for Branch storage (store original model instance)
+        branch = Branch.start(config_id, config)
+        print(f"Starting branch {config_id}")
+
+        func = mlflow.trace(
+            func, span_type="experiment_branch", attributes={"config_id": config_id}
+        )
+
+        inspect_signature = inspect.signature(func)
+        remaining_configs = list(config)
+        for param in inspect_signature.parameters.values():
+            # Inject config if annotation matches config model class or uses a generic name like 'config'
+            for subconfig in remaining_configs[:]:
+                if any(
                     issubclass(param_cls, subconfig.__class__)
-                    for param_cls in _resolve_class_types(param.annotation)
-                ]
-            ):
-                if param.kind in (param.POSITIONAL_ONLY,):
-                    args = args + (subconfig,)
-                elif (
-                    param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
-                    and param.name not in kwargs
+                    for param_cls in self._resolve_class_types(param.annotation)
                 ):
-                    kwargs[param.name] = subconfig
-                remaining_configs.remove(subconfig)  # Actually remove from the list
-                break
-    try:
-        if inspect.iscoroutinefunction(func):
-            result = await func(*args, **kwargs)
-        else:
-            result = func(*args, **kwargs)
-        branch.mark_success(result)
+                    if param.kind in (param.POSITIONAL_ONLY,):
+                        args = args + (subconfig,)
+                    elif (
+                        param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
+                        and param.name not in kwargs
+                    ):
+                        kwargs[param.name] = subconfig
+                    remaining_configs.remove(subconfig)  # Actually remove from the list
+                    break
+        try:
+            if inspect.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
+            branch.mark_success(result)
 
-    except Exception as exc:  # noqa: BLE001 - broad to capture and store exception
-        branch.mark_failure(exc)
+        except Exception as exc:  # noqa: BLE001 - broad to capture and store exception
+            branch.mark_failure(exc)
 
-    return branch
+        return branch
+
+    def _resolve_class_types(self, obj: Any) -> list[type]:
+        if obj.__class__ == Union:
+            return list(obj.__args__)
+
+        if inspect.isclass(obj):
+            return [obj]
+
+        return [obj.__class__]
 
 
-def _resolve_class_types(obj: Any) -> list[type]:
-    if obj.__class__ == Union:
-        return list(obj.__args__)
-
-    if inspect.isclass(obj):
-        return [obj]
-
-    return [obj.__class__]
-
-
-__all__ = ["Strategy", "_execute_branch", "TModel"]
+__all__ = ["Strategy"]

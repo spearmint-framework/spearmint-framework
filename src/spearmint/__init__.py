@@ -28,7 +28,7 @@ R = TypeVar("R")
 __version__ = "0.1.0"
 
 
-class Spearmint(Generic[TModel]):
+class Spearmint:
     """Main Spearmint class for managing experiments and strategies."""
 
     def __init__(self) -> None:
@@ -52,7 +52,7 @@ class Spearmint(Generic[TModel]):
         self.configs = self._config_handler(config_path)
 
     # TODO: TEST THIS
-    def add_config(self, *args: Sequence[BaseModel]) -> None:
+    def add_config(self, *args: Any) -> None:
         """
         Manually set configurations.
 
@@ -60,9 +60,10 @@ class Spearmint(Generic[TModel]):
             *args: Variable number of configuration dictionaries.
         """
         for cfg in args:
-            if not isinstance(cfg, BaseModel):
-                continue
-            self.configs.extend(_generate_configurations(cfg.model_dump()))
+            if isinstance(cfg, BaseModel):
+                self.configs.append(cfg.model_dump())
+            elif isinstance(cfg, dict):
+                self.configs.extend(_generate_configurations(cfg))
 
     def load_dataset(self, dataset_path: str | Path) -> None:
         """
@@ -192,7 +193,11 @@ class Spearmint(Generic[TModel]):
                 asyncio.run(runner())
         else:
             for data_line in self.dataset:
-                func(data_line)
+                kwargs = {}
+                for param in inspect.signature(func).parameters.keys():
+                    if param in data_line:
+                        kwargs[param] = data_line[param]
+                func(**kwargs)
 
         if not skip_eval:
             for evaluator in self._evaluators:

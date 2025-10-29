@@ -18,7 +18,7 @@ import time
 import traceback as tb
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
@@ -28,7 +28,7 @@ TModel = TypeVar("TModel", bound=BaseModel)
 
 
 @dataclass
-class Branch(Generic[TModel]):
+class Branch:
     """Represents a single execution branch of an experiment.
 
     A Branch tracks the configuration, execution timing, status, output,
@@ -36,7 +36,7 @@ class Branch(Generic[TModel]):
     """
 
     config_id: str
-    config: Sequence[TModel]
+    config: Sequence
     start_ts: float
     end_ts: float | None = None
     status: Status = "pending"
@@ -44,7 +44,7 @@ class Branch(Generic[TModel]):
     exception_info: ExceptionInfo | None = None
 
     @classmethod
-    def start(cls, config_id: str, config: Sequence[TModel]) -> "Branch[TModel]":
+    def start(cls, config_id: str, config: Sequence[TModel]) -> "Branch":
         """Create a new Branch with initialized start timestamp.
 
         Args:
@@ -165,13 +165,13 @@ class Branch(Generic[TModel]):
         }
 
 
-class BranchContainer(Generic[TModel]):
+class BranchContainer:
     """Container for managing collections of Branch instances.
 
     Provides iteration, indexing, and filtering capabilities for branch collections.
     """
 
-    def __init__(self, branches: list[Branch[TModel]]) -> None:
+    def __init__(self, branches: list[Branch]) -> None:
         """Initialize container with list of branches.
 
         Args:
@@ -179,7 +179,7 @@ class BranchContainer(Generic[TModel]):
         """
         self.branches = branches
 
-    def __iter__(self) -> Iterator[Branch[TModel]]:
+    def __iter__(self) -> Iterator[Branch]:
         """Allow iteration over branches."""
         return iter(self.branches)
 
@@ -187,7 +187,7 @@ class BranchContainer(Generic[TModel]):
         """Return number of branches in container."""
         return len(self.branches)
 
-    def __getitem__(self, index: int) -> Branch[TModel]:
+    def __getitem__(self, index: int) -> Branch:
         """Allow indexing into branch collection.
 
         Args:
@@ -198,7 +198,7 @@ class BranchContainer(Generic[TModel]):
         """
         return self.branches[index]
 
-    def successful(self) -> list[Branch[TModel]]:
+    def successful(self) -> list[Branch]:
         """Filter and return only successful branches.
 
         Returns:
@@ -206,7 +206,7 @@ class BranchContainer(Generic[TModel]):
         """
         return [b for b in self.branches if b.status == "success"]
 
-    def failed(self) -> list[Branch[TModel]]:
+    def failed(self) -> list[Branch]:
         """Filter and return only failed branches.
 
         Returns:
@@ -214,7 +214,7 @@ class BranchContainer(Generic[TModel]):
         """
         return [b for b in self.branches if b.status == "failed"]
 
-    def by_config_id(self, config_id: str) -> Branch[TModel] | None:
+    def by_config_id(self, config_id: str) -> Branch | None:
         """Find branch by configuration ID.
 
         Args:
@@ -228,7 +228,7 @@ class BranchContainer(Generic[TModel]):
                 return branch
         return None
 
-    def add(self, branch: Branch[TModel]) -> None:
+    def add(self, branch: Branch) -> None:
         """Add a branch to the container.
 
         Args:
