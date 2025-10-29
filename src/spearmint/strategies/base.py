@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any, Generic, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypeVar, Union
 
 import mlflow
 from pydantic import BaseModel
@@ -81,10 +81,16 @@ async def _execute_branch(
     func = mlflow.trace(func, span_type="experiment_branch", attributes={"config_id": config_id})
 
     inspect_signature = inspect.signature(func)
+    remaining_configs = list(config)
     for param in inspect_signature.parameters.values():
         # Inject config if annotation matches config model class or uses a generic name like 'config'
-        for subconfig in config:
-            if issubclass(param.annotation, subconfig.__class__):
+        for subconfig in remaining_configs[:]:
+            if any(
+                [
+                    issubclass(param_cls, subconfig.__class__)
+                    for param_cls in _resolve_class_types(param.annotation)
+                ]
+            ):
                 if param.kind in (param.POSITIONAL_ONLY,):
                     args = args + (subconfig,)
                 elif (
@@ -92,8 +98,8 @@ async def _execute_branch(
                     and param.name not in kwargs
                 ):
                     kwargs[param.name] = subconfig
-                del subconfig
-
+                remaining_configs.remove(subconfig)  # Actually remove from the list
+                break
     try:
         if inspect.iscoroutinefunction(func):
             result = await func(*args, **kwargs)
@@ -105,6 +111,16 @@ async def _execute_branch(
         branch.mark_failure(exc)
 
     return branch
+
+
+def _resolve_class_types(obj: Any) -> list[type]:
+    if obj.__class__ == Union:
+        return list(obj.__args__)
+
+    if inspect.isclass(obj):
+        return [obj]
+
+    return [obj.__class__]
 
 
 __all__ = ["Strategy", "_execute_branch", "TModel"]

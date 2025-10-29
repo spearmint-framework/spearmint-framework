@@ -6,6 +6,7 @@ A framework for experimentation with LLMs and document processing.
 import asyncio
 import inspect
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from functools import wraps
 from pathlib import Path
@@ -128,6 +129,7 @@ class Spearmint(Generic[TModel]):
                 return wrapper
             return decorator
         """
+        executor = ThreadPoolExecutor()
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             @wraps(func)
@@ -147,11 +149,9 @@ class Spearmint(Generic[TModel]):
 
             @wraps(func)
             def swrapper(*args: Any, **kwargs: Any) -> Any:
-                try:
-                    loop = asyncio.get_running_loop()
-                    return loop.run_until_complete(awrapper(*args, **kwargs))
-                except RuntimeError:
-                    return asyncio.run(awrapper(*args, **kwargs))
+                result = executor.submit(lambda: asyncio.run(awrapper(*args, **kwargs)))
+                r = result.result()
+                return r
 
             return awrapper if inspect.iscoroutinefunction(func) else swrapper
 
