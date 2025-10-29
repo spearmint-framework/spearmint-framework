@@ -1,5 +1,6 @@
 import itertools
 from collections.abc import Iterable
+from copy import deepcopy
 from typing import Any, Generic, TypeVar
 
 from pydantic._internal._schema_generation_shared import CallbackGetCoreSchemaHandler
@@ -61,7 +62,7 @@ def _generate_configurations(config: dict[str, Any]) -> list[dict[str, Any]]:
 
     # use itertools to generate all combinations of the sweeper values
     for combo in itertools.product(*values):
-        config_copy = config.copy()
+        config_copy = deepcopy(config)
         for item in combo:
             keys = item["keys"]
             value = item["value"]
@@ -87,9 +88,9 @@ def _find_dynamic_values(config: dict[str, Any], parent_keys: list = []) -> list
     dynamic_values = []
     for key, value in config.items():
         if isinstance(value, DynamicValue):
-            keys = [key]
-            keys.extend(parent_keys)
-            dynamic_values.append({"dynamic_value": value, "parent_keys": keys})
+            p_keys = parent_keys.copy()
+            p_keys.append(key)
+            dynamic_values.append({"dynamic_value": value, "parent_keys": p_keys})
         elif isinstance(value, dict):
             parent_keys.append(key)
             nested_dynamic_values = _find_dynamic_values(value, parent_keys)
