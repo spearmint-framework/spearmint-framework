@@ -23,18 +23,15 @@ import mlflow
 from pydantic import BaseModel
 
 from ..branch import Branch
-from ..config.config import Config
 
 
 class Strategy(ABC):
     """Abstract base class for execution strategies."""
 
-    def __init__(
-        self, configs: list[dict[str, Any]], bindings: dict[type[BaseModel], str] | None = None
-    ) -> None:
+    def __init__(self, configs: list[dict[str, Any]], bindings: dict[type[BaseModel], str]) -> None:
         """Initialize the strategy instance."""
         self.configs = configs
-        self.bindings = bindings or {Config: ""}
+        self.bindings = bindings
 
     @abstractmethod
     async def run(
@@ -85,7 +82,6 @@ class Strategy(ABC):
 
         Args:
             config: Configuration dictionary
-            index: Index of the config in the list
         Returns:
             Unique configuration ID as a string
         """

@@ -9,7 +9,7 @@ impacting the primary flow.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .base import Strategy
@@ -22,16 +22,17 @@ class ShadowStrategy(Strategy):
     executions in the background for comparison/testing purposes.
     """
 
-    def __init__(self, primary_index: int = 0) -> None:  # noqa: D401
+    def __init__(self, *args: Any, primary_index: int = 0, **kwargs: Any) -> None:
+        """Initialize the ShadowStrategy instance."""
+        super().__init__(*args, **kwargs)
         self.primary_index = primary_index
 
         # Shadow tasks created after primary run; store Task objects (branches as results)
-        self._shadow_tasks = []  # type: list[asyncio.Task]
+        self._shadow_tasks: list[Any] = []
 
     async def run(
         self,
         func: Callable[..., Awaitable[Any]],
-        configs: Sequence[TModel],
         *args: Any,
         **kwargs: Any,
     ) -> Any:
@@ -39,7 +40,6 @@ class ShadowStrategy(Strategy):
 
         Args:
             func: Async function to execute
-            configs: Sequence of configuration dictionaries
             *args: Positional arguments to pass to func
             **kwargs: Keyword arguments to pass to func
 
@@ -49,25 +49,27 @@ class ShadowStrategy(Strategy):
         Raises:
             ValueError: If configs is empty or primary_index out of range
         """
-        if not configs:
+        if not self.configs:
             raise ValueError("ShadowStrategy requires at least one config")
-        if self.primary_index >= len(configs):
+        if self.primary_index >= len(self.configs):
             raise ValueError(
-                f"Primary index {self.primary_index} out of range for {len(configs)} configs"
+                f"Primary index {self.primary_index} out of range for {len(self.configs)} configs"
             )
 
-        primary_config = configs[self.primary_index]
-        primary_config_id = f"shadow_primary_{self.primary_index}"
-        primary_branch = await _execute_branch(
-            func, primary_config, primary_config_id, *args, **kwargs
+        primary_config = self.configs[self.primary_index]
+        primary_config_id = self._generate_config_id(primary_config)
+        bound_primary_config = self._bind_config(primary_config)
+        primary_branch = await self._execute_branch(
+            func, bound_primary_config, primary_config_id, *args, **kwargs
         )
 
         self._shadow_tasks = []
-        for i, config in enumerate(configs):
+        for i, config in enumerate(self.configs):
             if i != self.primary_index:
-                config_id = f"shadow_{i}"
+                config_id = self._generate_config_id(config)
+                bound_config = self._bind_config(config)
                 task = asyncio.create_task(
-                    _execute_branch(func, config, config_id, *args, **kwargs)
+                    self._execute_branch(func, bound_config, config_id, *args, **kwargs)
                 )
                 self._shadow_tasks.append(task)
 

@@ -6,7 +6,6 @@ all collected branch results.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -14,12 +13,8 @@ from ..branch import BranchContainer
 from .base import Strategy
 
 
-class MultiBranchStrategy(Strategy):
-    """Strategy that executes all configs concurrently.
-
-    Fans out execution across all configs in parallel and returns a
-    BranchContainer with all results.
-    """
+class SingleConfigStrategy(Strategy):
+    """Strategy that executes the same single config."""
 
     async def run(
         self,
@@ -41,18 +36,19 @@ class MultiBranchStrategy(Strategy):
             ValueError: If configs is empty
         """
         if not self.configs:
-            raise ValueError("MultiBranchStrategy requires at least one config")
+            raise ValueError("SingleConfigStrategy requires one config")
 
-        tasks = []
-        for config in self.configs:
-            config_id = self._generate_config_id(config)
-            bound_config = self._bind_config(config)
-            task = self._execute_branch(func, bound_config, config_id, *args, **kwargs)
-            tasks.append(task)
+        config = self.configs[0]
+        config_id = self._generate_config_id(config)
+        bound_configs = self._bind_config(config)
+        branch = await self._execute_branch(func, bound_configs, config_id, *args, **kwargs)
 
-        branches = await asyncio.gather(*tasks, return_exceptions=False)
+        if branch.status == "failed" and branch.exception_info is not None:
+            exc_type = branch.exception_info["type"]
+            exc_message = branch.exception_info["message"]
+            raise RuntimeError(f"{exc_type}: {exc_message}")
 
-        return BranchContainer(list(branches))
+        return branch.output
 
 
-__all__ = ["MultiBranchStrategy"]
+__all__ = ["SingleConfigStrategy"]

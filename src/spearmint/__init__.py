@@ -15,6 +15,7 @@ from typing import Any, Generic, TypeVar
 from pydantic import BaseModel
 
 from spearmint.config.dynamic_value import _generate_configurations
+from spearmint.strategies.single_config import SingleConfigStrategy
 
 from .branch import Branch, BranchContainer
 from .config.config import Config
@@ -31,16 +32,20 @@ __version__ = "0.1.0"
 class Spearmint:
     """Main Spearmint class for managing experiments and strategies."""
 
-    def __init__(self) -> None:
-        self.strategy: Strategy | None = None
-        self.configs: list[dict[str, Any]] = []
+    def __init__(
+        self,
+        strategy: type[Strategy] | None = None,
+        configs: list[dict[str, Any]] | None = None,
+        bindings: dict[type[BaseModel], str] | None = None,
+    ) -> None:
+        if configs is None:
+            configs = []
+        self.strategy: type[Strategy] = strategy or SingleConfigStrategy
+        self.configs: list[dict[str, Any]] = configs or []
+        self.bindings: dict[type[BaseModel], str] = {Config: ""} if bindings is None else bindings
         self._config_handler: Callable[[str | Path], list[dict[str, Any]]] = yaml_handler
         self._dataset_handler: Callable[[str | Path], list[dict[str, Any]]] = jsonl_handler
         self._evaluators: list[Callable[..., Any]] = []
-
-    def get_config(self) -> dict[str, Any]:
-        """Get the next configuration from the config pool."""
-        return {}
 
     def load_config(self, config_path: str | Path) -> None:
         """
@@ -51,7 +56,6 @@ class Spearmint:
         """
         self.configs = self._config_handler(config_path)
 
-    # TODO: TEST THIS
     def add_config(self, *args: Any) -> None:
         """
         Manually set configurations.
@@ -64,6 +68,9 @@ class Spearmint:
                 self.configs.append(cfg.model_dump())
             elif isinstance(cfg, dict):
                 self.configs.extend(_generate_configurations(cfg))
+            elif isinstance(cfg, str) or isinstance(cfg, Path):
+                loaded_configs = self._config_handler(cfg)
+                self.configs.extend(loaded_configs)
 
     def load_dataset(self, dataset_path: str | Path) -> None:
         """
@@ -74,34 +81,11 @@ class Spearmint:
         """
         self.dataset = self._dataset_handler(dataset_path)
 
-    def _resolve_config(self, bind_path: str, model_cls: type[TModel]) -> list[TModel]:
-        """Resolve a configuration model from the bind path.
-
-        Args:
-            bind_path: Dot-separated path to the configuration in the loaded configs.
-        Returns:
-            An instance of the configuration model.
-        """
-        parts = bind_path.split(".")
-        configs = [deepcopy(c) for c in self.configs]
-        model_configs = []
-        for config_data in configs:
-            for part in parts:
-                if not part:
-                    continue
-                if part in config_data:
-                    config_data = config_data[part]
-                else:
-                    raise ValueError(f"Key '{part}' not found in bind path '{bind_path}'")
-
-            model_configs.append(model_cls.model_validate(config_data))
-
-        return model_configs
-
     def experiment(
         self,
-        strategy: Strategy | None = None,
-        model_cls_map: Mapping[str, type[TModel]] = {"": Config},
+        strategy: type[Strategy] | None = None,
+        configs: list[dict[str, Any]] | None = None,
+        bindings: dict[type[BaseModel], str] | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator for wrapping functions with experiment execution strategy.
 
@@ -135,18 +119,16 @@ class Spearmint:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             @wraps(func)
             async def awrapper(*args: Any, **kwargs: Any) -> Any:
-                selected_strategy = strategy or self.strategy
-                if selected_strategy is None:
-                    raise ValueError("Experiment strategy is not set. Use 'set_strategy' first.")
+                strategy_cls = strategy or self.strategy
+                selected_configs = configs or self.configs
+                selected_bindings = bindings or self.bindings
 
-                model_cfgs = [
-                    self._resolve_config(bind_path, model_cls)
-                    for bind_path, model_cls in model_cls_map.items()
-                ]
-                # transpose list of lists
-                model_cfgs = [list(t) for t in zip(*model_cfgs, strict=True)]
+                strategy_instance = strategy_cls(
+                    configs=selected_configs,
+                    bindings=selected_bindings,
+                )
 
-                return await selected_strategy.run(func, model_cfgs, *args, **kwargs)
+                return await strategy_instance.run(func, *args, **kwargs)
 
             @wraps(func)
             def swrapper(*args: Any, **kwargs: Any) -> Any:
