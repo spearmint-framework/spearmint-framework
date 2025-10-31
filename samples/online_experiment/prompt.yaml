@@ -1,0 +1,4 @@
+llm:
+  model_config:
+    model: "gpt-3.5-turbo"
+    prompt: "Summarize the following text in no more than {max_length} words:\n\n{text}"

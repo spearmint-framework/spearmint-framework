@@ -1,0 +1,4 @@
+llm:
+  model_config:
+    model: "gpt-5"
+    prompt: "You are a helpful assistant that summarizes text."
