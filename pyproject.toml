@@ -1,6 +1,6 @@
 [project]
 name = "spearmint-framework"
-version = "0.2.0"
+version = "0.2.1"
 description = "An experiment framework for easily testing multiple configurations of your code."
 readme = "README.md"
 authors = [
