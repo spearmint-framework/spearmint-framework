@@ -26,7 +26,7 @@ class MultiBranchStrategy(Strategy):
         func: Callable[..., Awaitable[Any]],
         *args: Any,
         **kwargs: Any,
-    ) -> BranchContainer:
+    ) -> tuple[Any, BranchContainer]:
         """Execute function concurrently with all configs.
 
         Args:
@@ -51,8 +51,9 @@ class MultiBranchStrategy(Strategy):
             tasks.append(task)
 
         branches = await asyncio.gather(*tasks, return_exceptions=False)
+        branch_container = BranchContainer(branches)
 
-        return BranchContainer(list(branches))
+        return branch_container, branch_container
 
 
 __all__ = ["MultiBranchStrategy"]

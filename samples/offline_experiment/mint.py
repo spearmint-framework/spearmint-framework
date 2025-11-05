@@ -1,9 +1,14 @@
 import argparse
 import asyncio
+from collections.abc import Callable
 from pprint import pprint
+from typing import Any
 
 from config import (
-    MyConfig,
+    MyConfig,  # noqa: F401
+    my_dynamic_generator_config,  # noqa: F401
+    my_dynamic_list_config,  # noqa: F401
+    my_dynamic_range_config,  # noqa: F401
 )
 
 from spearmint import Spearmint
@@ -15,6 +20,7 @@ from spearmint.strategies import (
     ShadowStrategy,
     SingleConfigStrategy,
 )
+from spearmint.tracers.opentelemetry_tracer import InMemoryOpenTelemetryTracer
 
 mint = Spearmint(
     # Uncomment exactly one of these strategies to see how it behaves.
@@ -27,14 +33,15 @@ mint = Spearmint(
     # Uncomment one or more of these configurations to
     # see how Spearmint handles the different types.
     configs=[
-        {"id": 1},  # Simple python dict config
-        # my_dynamic_list_config, # dict with expandable dynamic value: list
+        # {"id": 1},  # Simple python dict config
+        my_dynamic_list_config,  # dict with expandable dynamic value: list
         # my_dynamic_range_config, # dict with expandable dynamic value: range
         # my_dynamic_generator_config, # dict with expandable dynamic value: generator
         # "config/config0.yaml", # YAML config file path string
         # Path("config/config1.yaml"), # YAML config file path object
         # "config/", # Directory with YAML config files
     ],
+    tracer=InMemoryOpenTelemetryTracer(),
 )
 
 
@@ -88,22 +95,20 @@ def step3_multi(a: str, b: str, config: DefaultMintConfig) -> str | BranchContai
 
 
 def main(step1_input: str, step2_input: str, example: str) -> None:
-    step3_map = {
+    step3_map: dict[str, Callable[[str, str], Any]] = {
         "default": step3_default,
         "single": step3_single,
         "shadow": step3_shadow,
         "roundrobin": step3_round_robin,
-        "async": step3_default,  # Set to default, but run in async mode
+        # lambda to allow calling async function in sync context
+        "async": lambda a, b: asyncio.run(async_step3(a, b)),
     }
     if example in step3_map:
         print(f"Running single branch with {example.capitalize()} Strategy:")
         print("############################################")
         a = step1(step1_input)
         b = step2(step2_input)
-        if example == "async":
-            c = asyncio.run(async_step3(a, b))
-        else:
-            c = step3_map[example](a, b)
+        c = step3_map[example](a, b)
         d = step4(str(c))
 
         results = []
@@ -143,4 +148,16 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    main(args.step1_input, args.step2_input, example=args.example)
+    # main(args.step1_input, args.step2_input, example=args.example)
+
+    mint.run(
+        step3_shadow,
+        dataset=[
+            {"a": "111", "b": "222"},
+            {"a": "AAA", "b": "BBB"},
+        ],
+    )
+
+    for trace in mint.tracer.get_traces():
+        print(f"\nTrace: {trace.get('name')}")
+        pprint(trace.get("attributes", {}), indent=2)

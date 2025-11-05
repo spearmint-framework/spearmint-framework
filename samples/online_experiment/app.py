@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from spearmint import Spearmint
 from spearmint.config.dynamic_value import DynamicValue
 from spearmint.strategies import ShadowStrategy
+from spearmint.tracers import InMemoryOpenTelemetryTracer
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -27,6 +28,7 @@ mint: Spearmint = Spearmint(
             }
         }
     ],
+    tracer=InMemoryOpenTelemetryTracer(),
 )
 
 

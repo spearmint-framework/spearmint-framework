@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from spearmint.branch import BranchContainer
+
 from .base import Strategy
 
 
@@ -29,7 +31,7 @@ class RoundRobinStrategy(Strategy):
         func: Callable[..., Awaitable[Any]],
         *args: Any,
         **kwargs: Any,
-    ) -> Any:
+    ) -> tuple[Any, BranchContainer]:
         """Execute function with the next config in rotation.
 
         Args:
@@ -59,7 +61,7 @@ class RoundRobinStrategy(Strategy):
             exc_message = branch.exception_info["message"]
             raise RuntimeError(f"{exc_type}: {exc_message}")
 
-        return branch.output
+        return branch.output, BranchContainer([branch])
 
 
 __all__ = ["RoundRobinStrategy"]

@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from spearmint.branch import BranchContainer
+
 from .base import Strategy
 
 
@@ -20,7 +22,7 @@ class SingleConfigStrategy(Strategy):
         func: Callable[..., Awaitable[Any]],
         *args: Any,
         **kwargs: Any,
-    ) -> Any:
+    ) -> tuple[Any, BranchContainer]:
         """Execute function concurrently with all configs.
 
         Args:
@@ -37,6 +39,7 @@ class SingleConfigStrategy(Strategy):
         if not self.configs:
             raise ValueError("SingleConfigStrategy requires one config")
 
+        branch_container = BranchContainer([])
         config = self.configs[0]
         config_id = config["config_id"]
         bound_configs = self._bind_config(config)
@@ -47,7 +50,9 @@ class SingleConfigStrategy(Strategy):
             exc_message = branch.exception_info["message"]
             raise RuntimeError(f"{exc_type}: {exc_message}")
 
-        return branch.output
+        branch_container.add(branch)
+
+        return branch.output, branch_container
 
 
 __all__ = ["SingleConfigStrategy"]

@@ -2,7 +2,7 @@
 
 import pytest
 
-from spearmint.config.config import Config
+from spearmint.config import Config
 
 
 @pytest.fixture

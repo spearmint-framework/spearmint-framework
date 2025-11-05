@@ -237,4 +237,4 @@ class BranchContainer:
         self.branches.append(branch)
 
 
-__all__ = ["Branch", "BranchContainer", "TModel"]
+__all__ = ["Branch", "BranchContainer"]

@@ -1,11 +1,7 @@
-import itertools
 from collections.abc import Iterable
-from copy import deepcopy
 from typing import Any, Generic, TypeVar
 
 from pydantic._internal._schema_generation_shared import CallbackGetCoreSchemaHandler
-
-from .config import Config
 
 T = TypeVar("T")
 
@@ -41,62 +37,3 @@ class DynamicValue(Generic[T]):
 
         print("Generated schema:", schema)
         return schema
-
-
-def generate_configurations(config: dict[str, Any]) -> list[Config]:
-    """Generate configurations for the experiment based on the provided config.
-
-    Args:
-        config: Configuration parameters
-
-    Returns:
-        List of generated configurations
-    """
-    dynamic_value_maps = _find_dynamic_values(config)
-    values = []
-    configurations = []
-
-    for dynamic_value_mapping in dynamic_value_maps:
-        value_iterable = dynamic_value_mapping["dynamic_value"]
-        values.append(
-            [{"keys": dynamic_value_mapping["parent_keys"], "value": val} for val in value_iterable]
-        )
-
-    # use itertools to generate all combinations of the sweeper values
-    for combo in itertools.product(*values):
-        config_copy = deepcopy(config)
-        for item in combo:
-            keys = item["keys"]
-            value = item["value"]
-            # Traverse the config dictionary to set the value
-            d = config_copy
-            for key in keys[:-1]:
-                d = d.setdefault(key, {})
-            d[keys[-1]] = value
-        configurations.append(Config(config_copy))
-
-    return configurations
-
-
-def _find_dynamic_values(config: dict[str, Any], parent_keys: list = []) -> list[dict[str, Any]]:
-    """Find all dynamic_values in the configuration.
-
-    Args:
-        config: Configuration parameters
-
-    Returns:
-        List of found dynamic_values
-    """
-    dynamic_values = []
-    for key, value in config.items():
-        if isinstance(value, DynamicValue):
-            p_keys = parent_keys.copy()
-            p_keys.append(key)
-            dynamic_values.append({"dynamic_value": value, "parent_keys": p_keys})
-        elif isinstance(value, dict):
-            parent_keys.append(key)
-            nested_dynamic_values = _find_dynamic_values(value, parent_keys)
-            if nested_dynamic_values:
-                dynamic_values.extend(nested_dynamic_values)
-
-    return dynamic_values

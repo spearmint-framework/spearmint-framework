@@ -12,6 +12,8 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from spearmint.branch import BranchContainer
+
 from .base import Strategy
 
 
@@ -35,7 +37,7 @@ class ShadowStrategy(Strategy):
         func: Callable[..., Awaitable[Any]],
         *args: Any,
         **kwargs: Any,
-    ) -> Any:
+    ) -> tuple[Any, BranchContainer]:
         """Execute primary config foreground, schedule shadows in background.
 
         Args:
@@ -56,12 +58,16 @@ class ShadowStrategy(Strategy):
                 f"Primary index {self.primary_index} out of range for {len(self.configs)} configs"
             )
 
+        branch_container = BranchContainer([])  # Added line to create BranchContainer
+
         primary_config = self.configs[self.primary_index]
         primary_config_id = primary_config["config_id"]
         bound_primary_config = self._bind_config(primary_config)
         primary_branch = await self._execute_branch(
             func, bound_primary_config, primary_config_id, *args, **kwargs
         )
+
+        branch_container.add(primary_branch)
 
         self._shadow_tasks = []
         for i, config in enumerate(self.configs):
@@ -71,6 +77,7 @@ class ShadowStrategy(Strategy):
                 task = asyncio.create_task(
                     self._execute_branch(func, bound_config, config_id, *args, **kwargs)
                 )
+                task.add_done_callback(lambda t: branch_container.add(t.result()))
                 self._shadow_tasks.append(task)
 
         if primary_branch.status == "failed" and primary_branch.exception_info is not None:
@@ -78,7 +85,7 @@ class ShadowStrategy(Strategy):
             exc_message = primary_branch.exception_info["message"]
             raise RuntimeError(f"{exc_type}: {exc_message}")
 
-        return primary_branch.output
+        return primary_branch.output, branch_container
 
     async def gather_shadows(self) -> list[Any]:
         """Await all shadow task completions and return their branches.

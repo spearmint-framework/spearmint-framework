@@ -17,20 +17,24 @@ from collections.abc import Awaitable, Callable, Sequence
 from copy import deepcopy
 from typing import Any, Union
 
-import mlflow
 from pydantic import BaseModel
 
-from ..branch import Branch
+from spearmint.tracers.trace import TraceEvent, Tracer
+
+from ..branch import Branch, BranchContainer
 from ..config import Config
 
 
 class Strategy(ABC):
     """Abstract base class for execution strategies."""
 
-    def __init__(self, configs: Sequence[Config], bindings: dict[type[BaseModel], str]) -> None:
+    def __init__(
+        self, configs: Sequence[Config], bindings: dict[type[BaseModel], str], tracer: Tracer
+    ) -> None:
         """Initialize the strategy instance."""
         self.configs = configs
         self.bindings = bindings
+        self.tracer = tracer
 
     @property
     def config_ids(self) -> list[str]:
@@ -43,7 +47,7 @@ class Strategy(ABC):
         func: Callable[..., Awaitable[Any]],
         *args: Any,
         **kwargs: Any,
-    ) -> Any:  # pragma: no cover - protocol definition only
+    ) -> tuple[Any, BranchContainer]:  # pragma: no cover - protocol definition only
         """Execute the experiment function with the given configs.
 
         Args:
@@ -107,49 +111,43 @@ class Strategy(ABC):
         Returns:
             Branch instance with execution results
         """
-        # Extract active_line_id for MLFlow tracing
-        active_line_id = kwargs.pop("active_line_id", None)
-
         # Normalize config for Branch storage (store original model instance)
         branch = Branch.start(config_id, config)
-        print(f"Starting branch {config_id}")
-
-        # Set up MLFlow trace attributes
-        trace_attributes = {"config_id": config_id}
-        if active_line_id is not None:
-            trace_attributes["line_id"] = active_line_id
-
-        func = mlflow.trace(func, span_type="experiment_branch", attributes=trace_attributes)
-
-        inspect_signature = inspect.signature(func)
-        remaining_configs = list(config)
-        for param in inspect_signature.parameters.values():
-            # Inject config if annotation matches config model class or uses a generic name like 'config'
-            for subconfig in remaining_configs[:]:
-                if any(
-                    issubclass(param_cls, subconfig.__class__)
-                    for param_cls in self._resolve_class_types(param.annotation)
-                ):
-                    if param.kind in (param.POSITIONAL_ONLY,):
-                        args = args + (subconfig,)
-                    elif (
-                        param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
-                        and param.name not in kwargs
+        ctx = {
+            "config_id": config_id,
+        }
+        ctx.update(kwargs)
+        with self.tracer.trace(TraceEvent.BRANCH, context=ctx) as span:
+            inspect_signature = inspect.signature(func)
+            remaining_configs = list(config)
+            for param in inspect_signature.parameters.values():
+                # Inject config if annotation matches config model class or uses a generic name like 'config'
+                for subconfig in remaining_configs[:]:
+                    if any(
+                        issubclass(param_cls, subconfig.__class__)
+                        for param_cls in self._resolve_class_types(param.annotation)
                     ):
-                        kwargs[param.name] = subconfig
-                    remaining_configs.remove(subconfig)  # Actually remove from the list
-                    break
-        try:
-            if inspect.iscoroutinefunction(func):
-                result = await func(*args, **kwargs)
-            else:
-                result = func(*args, **kwargs)
-            branch.mark_success(result)
+                        if param.kind in (param.POSITIONAL_ONLY,):
+                            args = args + (subconfig,)
+                        elif (
+                            param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
+                            and param.name not in kwargs
+                        ):
+                            kwargs[param.name] = subconfig
+                        remaining_configs.remove(subconfig)  # Actually remove from the list
+                        break
+            try:
+                if inspect.iscoroutinefunction(func):
+                    result = await func(*args, **kwargs)
+                else:
+                    result = func(*args, **kwargs)
+                span.set_attribute("output", str(result))
+                branch.mark_success(result)
 
-        except Exception as exc:  # noqa: BLE001 - broad to capture and store exception
-            branch.mark_failure(exc)
+            except Exception as exc:  # noqa: BLE001 - broad to capture and store exception
+                branch.mark_failure(exc)
 
-        return branch
+            return branch
 
     def _resolve_class_types(self, obj: Any) -> list[type]:
         if obj.__class__ == Union:
