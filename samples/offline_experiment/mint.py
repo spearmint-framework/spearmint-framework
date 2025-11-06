@@ -20,7 +20,6 @@ from spearmint.strategies import (
     ShadowStrategy,
     SingleConfigStrategy,
 )
-from spearmint.tracers.opentelemetry_tracer import InMemoryOpenTelemetryTracer
 
 mint = Spearmint(
     # Uncomment exactly one of these strategies to see how it behaves.
@@ -41,7 +40,6 @@ mint = Spearmint(
         # Path("config/config1.yaml"), # YAML config file path object
         # "config/", # Directory with YAML config files
     ],
-    tracer=InMemoryOpenTelemetryTracer(),
 )
 
 
@@ -94,7 +92,7 @@ def step3_multi(a: str, b: str, config: DefaultMintConfig) -> str | BranchContai
     return f"{config['id']}-{a} {config['id']}-{b}"
 
 
-def main(step1_input: str, step2_input: str, example: str) -> None:
+def main(step1_input: str, step2_input: str, example: str) -> Any:
     step3_map: dict[str, Callable[[str, str], Any]] = {
         "default": step3_default,
         "single": step3_single,
@@ -104,7 +102,9 @@ def main(step1_input: str, step2_input: str, example: str) -> None:
         "async": lambda a, b: asyncio.run(async_step3(a, b)),
     }
     if example in step3_map:
-        print(f"Running single branch with {example.capitalize()} Strategy:")
+        print("############################################")
+        print(f"# Running single branch with {example.capitalize()} Strategy")
+        print(f"# step1_input: {step1_input}, step2_input: {step2_input}")
         print("############################################")
         a = step1(step1_input)
         b = step2(step2_input)
@@ -116,9 +116,12 @@ def main(step1_input: str, step2_input: str, example: str) -> None:
             results.append(step5(item))
 
         print(results, end="\n\n")
+        return results
 
     if example == "multi":
-        print("Running multi-branch with MultiBranch Strategy:")
+        print("############################################")
+        print("# Running multi-branch with MultiBranch Strategy")
+        print(f"# step1_input: {step1_input}, step2_input: {step2_input}")
         print("############################################")
         a = step1(step1_input)
         b = step2(step2_input)
@@ -132,8 +135,7 @@ def main(step1_input: str, step2_input: str, example: str) -> None:
                 results.append(step5(item))
             branches[branch.config_id] = results
 
-        pprint(branches, indent=2)
-        print()
+        return branches
 
 
 if __name__ == "__main__":

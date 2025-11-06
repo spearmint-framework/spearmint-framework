@@ -57,9 +57,7 @@ class Spearmint:
         return experiment(strategy, configs, bindings, tracer)
 
     def run(
-        self,
-        func: Callable[..., Any],
-        dataset: list[dict[str, Any]] | Path | str,
+        self, func: Callable[..., Any], dataset: list[dict[str, Any]] | Path | str
     ) -> list[dict[str, Any]]:
         """Run a function with the loaded dataset and configurations.
 
@@ -80,8 +78,6 @@ class Spearmint:
             for param in inspect.signature(func).parameters.keys():
                 if param in data_line:
                     kwargs[param] = data_line[param]
-            if "__all_branches" not in kwargs:
-                kwargs["__all_branches"] = True
 
             if inspect.iscoroutinefunction(func):
                 try:
@@ -144,11 +140,8 @@ def experiment(
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def awrapper(*args: Any, **kwargs: Any) -> Any:
-            all_branches = kwargs.pop("__all_branches", False)
             with tracer.trace(TraceEvent.EXPERIMENT, context={"func_name": func.__name__}):
                 output, branch_container = await strategy_instance.run(func, *args, **kwargs)
-            if all_branches:
-                return branch_container
             return output
 
         @wraps(func)
