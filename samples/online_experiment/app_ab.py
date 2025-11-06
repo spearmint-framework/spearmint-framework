@@ -30,7 +30,7 @@ mint: Spearmint = Spearmint(
                 "model_config": {
                     "model": DynamicValue(["gpt-4o", "gpt-4o-mini", "gpt-5"]),
                     "prompt": "Summarize the following text in no more than {max_length} words:\n\n{text}",
-                    "temperature": DynamicValue(generate_temps()),
+                    "temperature": DynamicValue([0.0, 0.5, 1.0]),
                 }
             }
         }
