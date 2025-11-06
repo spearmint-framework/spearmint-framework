@@ -148,16 +148,16 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # main(args.step1_input, args.step2_input, example=args.example)
-
-    mint.run(
-        step3_shadow,
+    results = mint.run(
+        main,
         dataset=[
-            {"a": "111", "b": "222"},
-            {"a": "AAA", "b": "BBB"},
+            {
+                "step1_input": args.step1_input,
+                "step2_input": args.step2_input,
+                "example": args.example,
+            },
+            {"step1_input": "foo", "step2_input": "bar", "example": args.example},
         ],
     )
 
-    for trace in mint.tracer.get_traces():
-        print(f"\nTrace: {trace.get('name')}")
-        pprint(trace.get("attributes", {}), indent=2)
+    pprint(results, indent=2)
