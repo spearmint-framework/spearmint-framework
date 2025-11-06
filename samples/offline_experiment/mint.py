@@ -59,10 +59,9 @@ def step5(item: str) -> str:
     return f"final result for {item}"
 
 
-# Decorator binds custom MyConfig model to the config parameter
-@mint.experiment(bindings={MyConfig: ""})
-def step3_default(a: str, b: str, config: MyConfig) -> str | BranchContainer:
-    return f"{config.id}-{a} {config.id}-{b}"
+@mint.experiment()
+def step3(a: str, b: str, config: DefaultMintConfig) -> str | BranchContainer:
+    return f"{config['id']}-{a} {config['id']}-{b}"
 
 
 # Decorator binds default Config model to the config parameter
@@ -70,6 +69,12 @@ def step3_default(a: str, b: str, config: MyConfig) -> str | BranchContainer:
 async def async_step3(a: str, b: str, config: DefaultMintConfig) -> str | BranchContainer:
     await asyncio.sleep(0.1)
     return f"{config['id']}-{a} {config['id']}-{b}"
+
+
+# Decorator binds custom MyConfig model to the config parameter
+@mint.experiment(bindings={MyConfig: ""})
+def step3_default(a: str, b: str, config: MyConfig) -> str | BranchContainer:
+    return f"{config.id}-{a} {config.id}-{b}"
 
 
 @mint.experiment(strategy=SingleConfigStrategy)

@@ -2,8 +2,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from spearmint import Spearmint
-from spearmint.config.dynamic_value import DynamicValue
-from spearmint.strategies import MultiBranchStrategy
+from spearmint.config import Config, DynamicValue
+from spearmint.strategies import MultiBranchStrategy, SingleConfigStrategy
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -23,7 +23,10 @@ mint: Spearmint = Spearmint(
                     "model": DynamicValue(["gpt-4o", "gpt-4o-mini", "gpt-5"]),
                     "prompt": "Summarize the following text in no more than {max_length} words:\n\n{text}",
                     "temperature": DynamicValue([0.0, 0.25, 0.5]),
-                }
+                },
+                "eval_summary": {
+                    "summary_mod": 10,
+                },
             }
         }
     ],
@@ -40,8 +43,8 @@ class SummarizeRequest(BaseModel):
 # Response model
 class SummarizeResponse(BaseModel):
     summary: str
-    original_length: int
-    summary_length: int
+    original_word_length: int
+    summary_word_length: int
 
 
 class ModelConfig(BaseModel):
@@ -68,7 +71,7 @@ async def summarize_text() -> SummarizeResponse:
         SummarizeResponse with the generated summary and metadata
     """
     request = SummarizeRequest(
-        text="OpenAI's mission is to ensure that artificial general intelligence benefits all of humanity. We are committed to building safe and beneficial AI systems, and to conducting research that advances the field of AI in a responsible manner.",
+        text="Microsoft's mission is to empower every person and every organization on the planet to achieve more.",
         max_length=150,
     )
     try:
@@ -80,11 +83,12 @@ async def summarize_text() -> SummarizeResponse:
             summaries.append(summary)
 
         eval_summaries = _evaluate_summaries(summaries)
+        best_summary = eval_summaries[0]
 
         return SummarizeResponse(
-            summary=summary,
-            original_length=len(request.text.split()),
-            summary_length=len(summary.split()),
+            summary=best_summary,
+            original_word_length=len(request.text.split()),
+            summary_word_length=len(best_summary.split()),
         )
 
     except Exception as e:
@@ -92,7 +96,7 @@ async def summarize_text() -> SummarizeResponse:
 
 
 @app.get("/summaries", response_model=list[SummarizeResponse])
-async def summarize_text() -> list[SummarizeResponse]:
+async def summarize_all_text() -> list[SummarizeResponse]:
     """
     Generate a summary of the provided text using OpenAI
 
@@ -103,7 +107,7 @@ async def summarize_text() -> list[SummarizeResponse]:
         SummarizeResponse with the generated summary and metadata
     """
     request = SummarizeRequest(
-        text="OpenAI's mission is to ensure that artificial general intelligence benefits all of humanity. We are committed to building safe and beneficial AI systems, and to conducting research that advances the field of AI in a responsible manner.",
+        text="Microsoft's mission is to empower every person and every organization on the planet to achieve more.",
         max_length=150,
     )
     try:
@@ -115,8 +119,8 @@ async def summarize_text() -> list[SummarizeResponse]:
             summaries.append(
                 SummarizeResponse(
                     summary=summary,
-                    original_length=len(request.text.split()),
-                    summary_length=len(summary.split()),
+                    original_word_length=len(request.text.split()),
+                    summary_word_length=len(summary.split()),
                 )
             )
 
@@ -150,20 +154,26 @@ def _generate_summary(
         max_tokens={max_tokens},
         temperature={model_config.temperature},
     )
-    
+
     response[{response}]\n\n""")
 
     return response
 
 
-def _evaluate_summaries(summaries: list[str]) -> list[SummarizeResponse]:
+@mint.experiment(strategy=SingleConfigStrategy, bindings={Config: "llm.eval_summary"})
+def _evaluate_summaries(summaries: list[str], config: Config) -> list[str]:
     # Fake evaluation logic
-    evaluated_summaries = []
+    mod = config["summary_mod"]
+    print(f"$$$$ EVALUATING SUMMARIES WITH MOD {mod} $$$$")
+    evaluated_summaries: list[dict[str, str | int]] = []
     for summary in summaries:
-        evaluated_summaries.append({"summary": summary, "score": len(summary) % 10})
+        scored_summary = {"summary": summary, "score": len(summary) % mod}
+        evaluated_summaries.append(scored_summary)
 
-    sorted_summaries = sorted(evaluated_summaries, key=lambda x: x.get("score"), reverse=True)
-    return [s["summary"] for s in sorted_summaries]
+    sorted_summaries = sorted(evaluated_summaries, key=lambda x: x.get("score", 0), reverse=True)
+    for s in sorted_summaries:
+        print(f"Evaluated summary: {s['summary']} with score: {s['score']}")
+    return [str(s["summary"]) for s in sorted_summaries]
 
 
 if __name__ == "__main__":
