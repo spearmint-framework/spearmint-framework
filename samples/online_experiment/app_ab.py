@@ -1,3 +1,5 @@
+from collections.abc import Generator
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
@@ -12,6 +14,12 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
+def generate_temps() -> Generator[float, None, None]:
+    for temp in range(0, 101, 50):
+        yield temp / 100.0
+
+
 mint: Spearmint = Spearmint(
     # This will run all configurations in the background
     strategy=RoundRobinStrategy,
@@ -22,7 +30,7 @@ mint: Spearmint = Spearmint(
                 "model_config": {
                     "model": DynamicValue(["gpt-4o", "gpt-4o-mini", "gpt-5"]),
                     "prompt": "Summarize the following text in no more than {max_length} words:\n\n{text}",
-                    "temperature": DynamicValue([0.0, 0.25, 0.5]),
+                    "temperature": DynamicValue(generate_temps()),
                 }
             }
         }

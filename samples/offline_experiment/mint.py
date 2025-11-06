@@ -162,4 +162,9 @@ if __name__ == "__main__":
         ],
     )
 
+    # results = mint.run(
+    #     main,
+    #     dataset="samples/offline_experiment/data/step_input.jsonl",
+    # )
+
     pprint(results, indent=2)
