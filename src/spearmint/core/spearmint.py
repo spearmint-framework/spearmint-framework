@@ -25,14 +25,14 @@ class Spearmint:
 
     def __init__(
         self,
-        strategy: type[BranchStrategy] | None = None,
+        branch_strategy: type[BranchStrategy] | None = None,
         configs: list[dict[str, Any] | Config] | None = None,
         bindings: dict[type[BaseModel], str] | None = None,
         evaluators: list[Callable[..., Any]] | None = None,
     ) -> None:
         self._config_handler: Callable[[str | Path], list[dict[str, Any]]] = yaml_handler
         self._dataset_handler: Callable[[str | Path], list[dict[str, Any]]] = jsonl_handler
-        self.strategy: type[BranchStrategy] = strategy or DefaultBranchStrategy
+        self.branch_strategy: type[BranchStrategy] = branch_strategy or DefaultBranchStrategy
         self.configs: list[Config] = parse_configs(configs or [], self._config_handler)
         self.bindings: dict[type[BaseModel], str] = {Config: ""} if bindings is None else bindings
         self.evaluators: list[Callable[..., Any]] = evaluators or []
@@ -58,12 +58,12 @@ class Spearmint:
     
     def configure(
         self,
-        strategy: type[BranchStrategy] | None = None,
+        branch_strategy: type[BranchStrategy] | None = None,
         configs: list[dict[str, Any] | Config | str | Path] | None = None,
         bindings: dict[type[BaseModel], str] | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator for wrapping functions with experiment execution strategy."""
-        strategy = strategy or self.strategy
+        branch_strategy = branch_strategy or self.branch_strategy
         configs = configs or self.configs
         bindings = bindings or self.bindings
         configs = parse_configs(configs or [], yaml_handler)
@@ -72,8 +72,8 @@ class Spearmint:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             @wraps(func)
             async def awrapper(*args: Any, **kwargs: Any) -> Any:
-                strategy_instance = strategy(func=func, configs=configs, bindings=bindings)
-                return await strategy_instance.run(*args, **kwargs)
+                branch_strategy_instance = branch_strategy(func=func, configs=configs, bindings=bindings)
+                return await branch_strategy_instance.run(*args, **kwargs)
 
             @wraps(func)
             def swrapper(*args: Any, **kwargs: Any) -> Any:
@@ -131,41 +131,41 @@ class Spearmint:
 
         return output_dataset
     
-    def configure(
-        self,
-        branch_strategy: type[BranchStrategy] | None = None,
-        configs: list[dict[str, Any] | Config] | None = None,
-        bindings: dict[type[BaseModel], str] | None = None,
-    ) -> None:
-        """Configure the Spearmint instance with new settings."""
+    # def configure(
+    #     self,
+    #     branch_strategy: type[BranchStrategy] | None = None,
+    #     configs: list[dict[str, Any] | Config] | None = None,
+    #     bindings: dict[type[BaseModel], str] | None = None,
+    # ) -> None:
+    #     """Configure the Spearmint instance with new settings."""
 
-        executor = ThreadPoolExecutor()
-        configs = parse_configs(configs or [], self._config_handler)
-        bindings = {Config: ""} if bindings is None else bindings
+    #     executor = ThreadPoolExecutor()
+    #     configs = parse_configs(configs or [], self._config_handler)
+    #     bindings = {Config: ""} if bindings is None else bindings
 
 
-        strategy_instance = branch_strategy(
-            configs=configs,
-            bindings=bindings,
-        )
+    #     strategy_instance = branch_strategy(
+    #         configs=configs,
+    #         bindings=bindings,
+    #     )
 
-        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            @wraps(func)
-            async def awrapper(*args: Any, **kwargs: Any) -> Any:
-                return await strategy_instance.run(func, *args, **kwargs)
+    #     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    #         @wraps(func)
+    #         async def awrapper(*args: Any, **kwargs: Any) -> Any:
+    #             return await strategy_instance.run(func, *args, **kwargs)
 
-            @wraps(func)
-            def swrapper(*args: Any, **kwargs: Any) -> Any:
-                result = executor.submit(lambda: asyncio.run(awrapper(*args, **kwargs)))
-                return result.result()
+    #         @wraps(func)
+    #         def swrapper(*args: Any, **kwargs: Any) -> Any:
+    #             result = executor.submit(lambda: asyncio.run(awrapper(*args, **kwargs)))
+    #             return result.result()
 
-            return awrapper if inspect.iscoroutinefunction(func) else swrapper
+    #         return awrapper if inspect.iscoroutinefunction(func) else swrapper
 
-        return decorator
+    #     return decorator
 
 
 def experiment(
-    strategy: type[BranchStrategy],
+    branch_strategy: type[BranchStrategy],
     configs: list[dict[str, Any] | Config | str | Path],
     bindings: dict[type[BaseModel], str] | None = None,
     evaluators: list[Callable[..., Any]] | None = None,
@@ -189,7 +189,7 @@ def experiment(
         >>> result = await my_func(10)
     """
     spearmint_instance = Spearmint(
-        strategy=strategy,
+        branch_strategy=branch_strategy,
         configs=configs,
         bindings=bindings,
         evaluators=evaluators,

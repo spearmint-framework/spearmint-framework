@@ -146,9 +146,12 @@ class TestConfigureDecoratorMultipleConfigs:
         
         result = await process(5)
         
-        # MultiBranch executes all but returns default branch output
-        # First config has temperature=0.7, so 5 * 7 = 35
-        assert result == 35
+        # MultiBranch returns the branches as output
+        assert isinstance(result, list)
+        assert len(result) == len(sample_configs)
+        assert any(r.output == 5 * 7 for r in result)  # 0.7 * 10
+        assert any(r.output == 5 * 9 for r in result)  # 0.9 * 10
+        assert any(r.output == 5 * 5 for r in result)  # 0.5 * 10
 
 
 class TestExperimentDecorator:

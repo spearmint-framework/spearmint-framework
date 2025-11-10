@@ -51,7 +51,7 @@ class Branch(RunWrapper):
     async def run(self, *args: Any, **kwargs: Any) -> Any:
         """Run the branch with dependency-injected config."""
         async with self.wrapped():
-            injected_args, injected_kwargs = self.config_di_handler(self.configs, *args, **kwargs)
+            injected_args, injected_kwargs = self.config_di_handler(self.func, self.configs, *args, **kwargs)
             if inspect.iscoroutinefunction(self.func):
                 result = await self.func(*injected_args, **injected_kwargs)
             else:

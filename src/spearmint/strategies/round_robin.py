@@ -1,5 +1,5 @@
-from collections.abc import Generator
 from typing import Any
+from collections.abc import AsyncGenerator
 
 from spearmint.core.branch_strategy import BranchStrategy
 from spearmint.core.branch import BranchExecType
@@ -9,7 +9,7 @@ INDEX = 0
 
 class RoundRobinBranchStrategy(BranchStrategy):
     @on_run
-    def select_next_branch(self) -> Generator[Any, None, None]:
+    async def select_next_branch(self) -> AsyncGenerator[Any, None, None]:
         global INDEX
         # Select next branch as default
         default_branch = self.branches[INDEX]

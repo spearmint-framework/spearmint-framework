@@ -4,9 +4,9 @@ from typing import Any, Callable, Union
 from pydantic import BaseModel
 
 
-def inject_config(func: Callable[..., Any], config: list[BaseModel], *args: Any, **kwargs: Any) -> tuple[tuple[Any, ...], dict[str, Any]]:
+def inject_config(func: Callable[..., Any], configs: list[BaseModel], *args: Any, **kwargs: Any) -> tuple[tuple[Any, ...], dict[str, Any]]:
     inspect_signature = inspect.signature(func)
-    remaining_configs = list(config)
+    remaining_configs = list(configs)
     for param in inspect_signature.parameters.values():
         # Inject config if annotation matches config model class or uses a generic name like 'config'
         for subconfig in remaining_configs[:]:

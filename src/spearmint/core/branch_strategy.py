@@ -30,20 +30,20 @@ class BranchStrategy(RunWrapper):
         branch.default = True
 
     @property
-    def sequential_branches(self) -> bool:
-        return all(branch.exec_type == BranchExecType.SEQUENTIAL for branch in self.branches)
+    def sequential_branches(self) -> list[Branch]:
+        return [branch for branch in self.branches if branch.exec_type == BranchExecType.SEQUENTIAL]
 
     @property
-    def parallel_branches(self) -> bool:
-        return all(branch.exec_type == BranchExecType.PARALLEL for branch in self.branches)
+    def parallel_branches(self) -> list[Branch]:
+        return [branch for branch in self.branches if branch.exec_type == BranchExecType.PARALLEL]
     
     @property
-    def background_branches(self) -> bool:
-        return all(branch.exec_type == BranchExecType.BACKGROUND for branch in self.branches)
+    def background_branches(self) -> list[Branch]:
+        return [branch for branch in self.branches if branch.exec_type == BranchExecType.BACKGROUND]
 
     @property
-    def noop_branches(self) -> bool:
-        return all(branch.exec_type == BranchExecType.NOOP for branch in self.branches)
+    def noop_branches(self) -> list[Branch]:
+        return [branch for branch in self.branches if branch.exec_type == BranchExecType.NOOP]
 
     @property
     def output(self) -> Any:

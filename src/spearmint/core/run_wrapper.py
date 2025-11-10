@@ -10,18 +10,20 @@ class RunWrapper:
 
     def __init_subclass__(cls: type["RunWrapper"], **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        cls.run_wrappers.extend(
-            getattr(cls, name)
-            for name in dir(cls)
-            if hasattr(getattr(cls, name), "_is_run_wrapper")
-        )
+        for name in dir(cls):
+            attr = getattr(cls, name)
+            if hasattr(attr, "_is_run_wrapper"):
+                attr.__setattr__("_owner_class", cls)
+                cls.run_wrappers.append(attr)
 
     @asynccontextmanager
     async def wrapped(self):
         async with AsyncExitStack() as stack:
             # Enter all wrappers in order
             for wrapper in self.run_wrappers:
-                await stack.enter_async_context(wrapper(self))
+                owner = getattr(wrapper, "_owner_class", None)
+                if owner and isinstance(self, owner):
+                    await stack.enter_async_context(wrapper(self))
 
             yield
 
@@ -35,6 +37,7 @@ def on_run(cls_or_func: type[RunWrapper] | Callable[..., Any] | None = None) -> 
         func.__setattr__("_is_run_wrapper", True)
 
         if cls_type:
+            func.__setattr__("_owner_class", cls_type)
             cls_type.run_wrappers.append(func)
 
         return func

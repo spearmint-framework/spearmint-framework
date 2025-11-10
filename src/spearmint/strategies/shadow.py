@@ -1,5 +1,5 @@
 import random
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from spearmint.core.branch_strategy import BranchStrategy
@@ -8,7 +8,7 @@ from spearmint.core.run_wrapper import on_run
 
 class ShadowBranchStrategy(BranchStrategy):
     @on_run
-    def set_background_branches(self) -> Generator[Any, None, None]:
+    async def set_background_branches(self) -> AsyncGenerator[Any, None, None]:
         # get the default branch
         default_branch = self.default_branch
 
