@@ -2,6 +2,9 @@ from collections.abc import Callable
 from contextlib import AsyncExitStack
 from typing import Any
 
+
+from .dependency_injector import inject_config
+from .branch import Branch
 from .run_wrapper import RunWrapper
 
 
@@ -15,7 +18,11 @@ class Experiment(RunWrapper):
 
     def __init__(self, func: Callable[..., Any]) -> None:
         self.func: Callable[..., Any] = func
-        self.results: list[Any] = []
+        self.branches: list[Branch] = []
+        self.branch_evals: list[Any] = []
+        self.evaluators: list[Callable[..., Any]] = []
+        self.dependency_injector: Callable[..., Any] = inject_config
+        self.output: Any = None
 
     async def run(self, *args: Any, **kwargs: Any) -> Any:
         """Run the experiment with the given arguments.
@@ -30,17 +37,19 @@ class Experiment(RunWrapper):
         Returns:
             The result of the experiment run.
         """
+        async with self.wrapped():
+            injected_args, injected_kwargs = self.dependency_injector(*args, **kwargs)
 
-        async with AsyncExitStack() as stack:
-            # Enter all wrappers in order
-            for wrapper in self.run_wrappers:
-                await stack.enter_async_context(wrapper(self))
-
-            result = await self.func(*args, **kwargs)
+            self.output = await self.func(*injected_args, **injected_kwargs)
             self.evaluate()
-            return result
+
+        return self.output
 
     def evaluate(self) -> None:
-        e = Evaluator()
-        for branch in self.results:
-            e.run(branch)
+        for evaluate in self.evaluators:
+            for branch in self.branches:
+                eval_result = evaluate(branch)
+                self.branch_evals.append({
+                    "branch": branch,
+                    "result": eval_result
+                })

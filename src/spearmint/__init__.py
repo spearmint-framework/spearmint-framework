@@ -1,15 +1,24 @@
-from .branch import Branch, BranchContainer
-from .config import Config
-from .spearmint import Spearmint
+from .core import (
+    Branch,
+    BranchStrategy,
+    BranchExecType,
+    Config,
+    Spearmint,
+    experiment_decorator as experiment,
+    configure_decorator as configure, 
 
-# from .experiment import experiment as experiment_decorator
-__version__ = "0.1.0"
+)
+
+__version__ = "0.3.0"
 
 
 __all__ = [
     "__version__",
     "Config",
     "Branch",
-    "BranchContainer",
+    "BranchExecType",
+    "BranchStrategy",
     "Spearmint",
+    "experiment",
+    "configure",
 ]

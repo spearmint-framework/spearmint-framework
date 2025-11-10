@@ -1,0 +1,5 @@
+id: single_test_config
+setting: test_value
+value: 42
+offset: 10
+separator: "|"

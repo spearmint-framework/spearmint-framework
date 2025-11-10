@@ -12,16 +12,16 @@ backward compatibility.
 
 from __future__ import annotations
 
-from .base import Strategy
 from .multi_branch import MultiBranchStrategy
-from .round_robin import RoundRobinStrategy
-from .shadow import ShadowStrategy
-from .single_config import SingleConfigStrategy
+from .round_robin import RoundRobinBranchStrategy
+from .shadow import ShadowBranchStrategy
+from .default import DefaultBranchStrategy
+from .random import RandomBranchStrategy
 
 __all__ = [
-    "Strategy",
-    "RoundRobinStrategy",
-    "ShadowStrategy",
+    "RoundRobinBranchStrategy",
+    "ShadowBranchStrategy",
     "MultiBranchStrategy",
-    "SingleConfigStrategy",
+    "DefaultBranchStrategy",
+    "RandomBranchStrategy",
 ]

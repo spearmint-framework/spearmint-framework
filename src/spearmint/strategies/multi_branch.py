@@ -1,59 +1,15 @@
-"""Multi-branch concurrent execution strategy.
-
-Executes all configurations concurrently and returns a `BranchContainer` with
-all collected branch results.
-"""
-
-from __future__ import annotations
-
-import asyncio
-from collections.abc import Awaitable, Callable
+import random
+from collections.abc import Generator
 from typing import Any
 
-from ..branch import BranchContainer
-from .base import Strategy
+from spearmint.core.branch_strategy import BranchStrategy
+from spearmint.core.branch import BranchExecType
+from spearmint.core.run_wrapper import on_run
 
+class MultiBranchStrategy(BranchStrategy):
+    @on_run
+    def parallelize_branches(self) -> Generator[Any, None, None]:
+        for branch in self.branches:
+            branch.exec_type = BranchExecType.PARALLEL
 
-class MultiBranchStrategy(Strategy):
-    """Strategy that executes all configs concurrently.
-
-    Fans out execution across all configs in parallel and returns a
-    BranchContainer with all results.
-    """
-
-    async def run(
-        self,
-        func: Callable[..., Awaitable[Any]],
-        *args: Any,
-        **kwargs: Any,
-    ) -> tuple[Any, BranchContainer]:
-        """Execute function concurrently with all configs.
-
-        Args:
-            func: Async function to execute
-            *args: Positional arguments to pass to func
-            **kwargs: Keyword arguments to pass to func
-
-        Returns:
-            BranchContainer with all execution results
-
-        Raises:
-            ValueError: If configs is empty
-        """
-        if not self.configs:
-            raise ValueError("MultiBranchStrategy requires at least one config")
-
-        tasks = []
-        for config in self.configs:
-            config_id = config["config_id"]
-            bound_config = self._bind_config(config)
-            task = self._execute_branch(func, bound_config, config_id, *args, **kwargs)
-            tasks.append(task)
-
-        branches = await asyncio.gather(*tasks, return_exceptions=False)
-        branch_container = BranchContainer(branches)
-
-        return branch_container, branch_container
-
-
-__all__ = ["MultiBranchStrategy"]
+        yield

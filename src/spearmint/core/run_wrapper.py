@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any
 
 
@@ -15,6 +15,15 @@ class RunWrapper:
             for name in dir(cls)
             if hasattr(getattr(cls, name), "_is_run_wrapper")
         )
+
+    @asynccontextmanager
+    async def wrapped(self):
+        async with AsyncExitStack() as stack:
+            # Enter all wrappers in order
+            for wrapper in self.run_wrappers:
+                await stack.enter_async_context(wrapper(self))
+
+            yield
 
 
 def on_run(cls_or_func: type[RunWrapper] | Callable[..., Any] | None = None) -> Callable[..., Any]:

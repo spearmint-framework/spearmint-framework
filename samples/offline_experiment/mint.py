@@ -12,7 +12,7 @@ from config import (
 )
 
 from spearmint import Spearmint
-from spearmint.branch import BranchContainer
+from spearmint.core.branch import BranchContainer
 from spearmint.config import Config as DefaultMintConfig
 from spearmint.strategies import (
     MultiBranchStrategy,

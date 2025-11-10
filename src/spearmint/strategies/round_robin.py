@@ -1,67 +1,26 @@
-"""Round-robin strategy implementation.
-
-Executes one configuration per invocation, cycling sequentially through the
-provided list of configs.
-"""
-
-from __future__ import annotations
-
-from collections.abc import Awaitable, Callable
+from collections.abc import Generator
 from typing import Any
 
-from spearmint.branch import BranchContainer
+from spearmint.core.branch_strategy import BranchStrategy
+from spearmint.core.branch import BranchExecType
+from spearmint.core.run_wrapper import on_run
 
-from .base import Strategy
+INDEX = 0
 
+class RoundRobinBranchStrategy(BranchStrategy):
+    @on_run
+    def select_next_branch(self) -> Generator[Any, None, None]:
+        global INDEX
+        # Select next branch as default
+        default_branch = self.branches[INDEX]
+        self.default_branch(default_branch)
 
-class RoundRobinStrategy(Strategy):
-    """Strategy that cycles through configs sequentially on each execution.
+        # Update INDEX for next run
+        INDEX = (INDEX + 1) % len(self.branches)
 
-    Maintains an internal index that rotates through the config list,
-    executing one config per call and returning its output directly.
-    """
+        # Set all other branches to NOOP
+        for branch in self.branches:
+            if branch != default_branch:
+                branch.exec_type = BranchExecType.NOOP
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        """Initialize the RoundRobinStrategy instance."""
-        super().__init__(*args, **kwargs)
-        self._index = 0
-
-    async def run(
-        self,
-        func: Callable[..., Awaitable[Any]],
-        *args: Any,
-        **kwargs: Any,
-    ) -> tuple[Any, BranchContainer]:
-        """Execute function with the next config in rotation.
-
-        Args:
-            func: Async function to execute
-            configs: Sequence of configuration dictionaries
-            *args: Positional arguments to pass to func
-            **kwargs: Keyword arguments to pass to func
-
-        Returns:
-            Direct output from the executed function
-
-        Raises:
-            ValueError: If configs is empty
-        """
-        if not self.configs:
-            raise ValueError("RoundRobinStrategy requires at least one config")
-
-        config = self.configs[self._index]
-        config_id = config["config_id"]
-        bound_configs = self._bind_config(config)
-        branch = await self._execute_branch(func, bound_configs, config_id, *args, **kwargs)
-
-        self._index = (self._index + 1) % len(self.configs)
-
-        if branch.status == "failed" and branch.exception_info is not None:
-            exc_type = branch.exception_info["type"]
-            exc_message = branch.exception_info["message"]
-            raise RuntimeError(f"{exc_type}: {exc_message}")
-
-        return branch.output, BranchContainer([branch])
-
-
-__all__ = ["RoundRobinStrategy"]
+        yield
