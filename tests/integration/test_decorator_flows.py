@@ -162,7 +162,7 @@ class TestExperimentDecorator:
         """@experiment decorator wraps function correctly."""
         
         @experiment(
-            strategy=DefaultBranchStrategy,
+            branch_strategy=DefaultBranchStrategy,
             configs=sample_configs,
         )
         async def analyze(text: str, config: Config) -> dict:
@@ -183,7 +183,7 @@ class TestExperimentDecorator:
         """@experiment decorator works with sync functions."""
         
         @experiment(
-            strategy=DefaultBranchStrategy,
+            branch_strategy=DefaultBranchStrategy,
             configs=single_config,
         )
         def compute(x: int, y: int, config: Config) -> int:
@@ -202,7 +202,7 @@ class TestSpearmintInstanceBasedDecoration:
         """Spearmint instance .configure() method works correctly."""
         
         sp = Spearmint(
-            strategy=DefaultBranchStrategy,
+            branch_strategy=DefaultBranchStrategy,
             configs=sample_configs,
         )
         
@@ -220,7 +220,7 @@ class TestSpearmintInstanceBasedDecoration:
         """Spearmint instance .experiment() method works correctly."""
         
         sp = Spearmint(
-            strategy=DefaultBranchStrategy,
+            branch_strategy=DefaultBranchStrategy,
             configs=sample_configs,
         )
         
@@ -238,7 +238,7 @@ class TestSpearmintInstanceBasedDecoration:
         """Spearmint instance can override strategy in decorator."""
         
         sp = Spearmint(
-            strategy=DefaultBranchStrategy,  # Default strategy
+            branch_strategy=DefaultBranchStrategy,  # Default strategy
             configs=sample_configs,
         )
         

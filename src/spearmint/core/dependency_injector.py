@@ -1,14 +1,41 @@
 import inspect
+from collections.abc import Callable
+from typing import Any, Union
 
-from typing import Any, Callable, Union
 from pydantic import BaseModel
 
 
-def inject_config(func: Callable[..., Any], configs: list[BaseModel], *args: Any, **kwargs: Any) -> tuple[tuple[Any, ...], dict[str, Any]]:
+def inject_config(
+    func: Callable[..., Any], configs: list[BaseModel], *args: Any, **kwargs: Any
+) -> tuple[tuple[Any, ...], dict[str, Any]]:
     inspect_signature = inspect.signature(func)
     remaining_configs = list(configs)
-    for param in inspect_signature.parameters.values():
-        # Inject config if annotation matches config model class or uses a generic name like 'config'
+
+    # Track which parameters have been filled by positional arguments
+    params_list = list(inspect_signature.parameters.values())
+    filled_params = set()
+
+    # Mark parameters that are already filled by positional args
+    for i, arg in enumerate(args):
+        if i < len(params_list):
+            param = params_list[i]
+            # Only mark as filled if it's not VAR_POSITIONAL (*args)
+            if param.kind != inspect.Parameter.VAR_POSITIONAL:
+                filled_params.add(param.name)
+
+    # Also mark any kwargs that were explicitly provided
+    filled_params.update(kwargs.keys())
+
+    for param in params_list:
+        # Skip if parameter is already filled
+        if param.name in filled_params:
+            continue
+
+        # Skip VAR_POSITIONAL (*args) and VAR_KEYWORD (**kwargs)
+        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+            continue
+
+        # Inject config if annotation matches config model class
         for subconfig in remaining_configs[:]:
             if any(
                 issubclass(param_cls, subconfig.__class__)
@@ -16,12 +43,9 @@ def inject_config(func: Callable[..., Any], configs: list[BaseModel], *args: Any
             ):
                 if param.kind in (param.POSITIONAL_ONLY,):
                     args = args + (subconfig,)
-                elif (
-                    param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD)
-                    and param.name not in kwargs
-                ):
+                elif param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD):
                     kwargs[param.name] = subconfig
-                remaining_configs.remove(subconfig)  # Actually remove from the list
+                remaining_configs.remove(subconfig)
                 break
 
     return args, kwargs

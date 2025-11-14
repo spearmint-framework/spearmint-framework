@@ -7,7 +7,6 @@ import asyncio
 import inspect
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from copy import deepcopy
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -39,7 +38,7 @@ class Spearmint:
 
     def experiment(
         self,
-        strategy: type[BranchStrategy] | None = None,
+        branch_strategy: type[BranchStrategy] | None = None,
         configs: list[dict[str, Any] | Config | str | Path] | None = None,
         bindings: dict[type[BaseModel], str] | None = None,
         evaluators: list[Callable[..., Any]] | None = None,
@@ -49,13 +48,13 @@ class Spearmint:
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             return self.configure(
-                strategy=strategy,
+                branch_strategy=branch_strategy,
                 configs=configs,
                 bindings=bindings,
             )(func)
 
         return decorator
-    
+
     def configure(
         self,
         branch_strategy: type[BranchStrategy] | None = None,
@@ -72,7 +71,9 @@ class Spearmint:
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             @wraps(func)
             async def awrapper(*args: Any, **kwargs: Any) -> Any:
-                branch_strategy_instance = branch_strategy(func=func, configs=configs, bindings=bindings)
+                branch_strategy_instance = branch_strategy(
+                    func=func, configs=configs, bindings=bindings
+                )
                 return await branch_strategy_instance.run(*args, **kwargs)
 
             @wraps(func)
@@ -84,7 +85,6 @@ class Spearmint:
             return awrapper if inspect.iscoroutinefunction(func) else swrapper
 
         return decorator
-    
 
     def run(
         self, func: Callable[..., Any], dataset: list[dict[str, Any]] | Path | str
@@ -130,7 +130,7 @@ class Spearmint:
         #         output_dataset.append(output_data_line)
 
         return output_dataset
-    
+
     # def configure(
     #     self,
     #     branch_strategy: type[BranchStrategy] | None = None,
@@ -142,7 +142,6 @@ class Spearmint:
     #     executor = ThreadPoolExecutor()
     #     configs = parse_configs(configs or [], self._config_handler)
     #     bindings = {Config: ""} if bindings is None else bindings
-
 
     #     strategy_instance = branch_strategy(
     #         configs=configs,
@@ -195,6 +194,7 @@ def experiment(
         evaluators=evaluators,
     )
     return spearmint_instance.experiment()
+
 
 def configure(
     branch_strategy: type[BranchStrategy],
