@@ -15,12 +15,18 @@ def inject_config(
     params_list = list(inspect_signature.parameters.values())
     filled_params = set()
 
-    # Mark parameters that are already filled by positional args
-    for i, arg in enumerate(args):
-        if i < len(params_list):
-            param = params_list[i]
-            # Only mark as filled if it's not VAR_POSITIONAL (*args)
-            if param.kind != inspect.Parameter.VAR_POSITIONAL:
+    if not params_list:
+        return args, kwargs
+
+    if params_list[0].kind != inspect.Parameter.VAR_POSITIONAL:
+        # Mark parameters that are already filled by positional args
+        for i, arg in enumerate(args):
+            if i < len(params_list):
+                param = params_list[i]
+                # Only mark as filled if it's not VAR_POSITIONAL (*args)
+                if param.kind == inspect.Parameter.VAR_KEYWORD:
+                    break
+
                 filled_params.add(param.name)
 
     # Also mark any kwargs that were explicitly provided
