@@ -196,7 +196,7 @@ if __name__ == "__main__":
         results = main(
             step1_input=args.step1_input,
             step2_input=args.step2_input,
-            example="async",  # args.example,
+            example=args.example,
         )
 
         print("============================================")

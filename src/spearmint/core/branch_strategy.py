@@ -56,6 +56,7 @@ class BranchStrategy(RunWrapper):
 
             tasks = []
             for branch in self.parallel_branches:
+                # Create task with context inheritance via direct awaitable
                 task = asyncio.create_task(branch.run(*args, **kwargs))
                 tasks.append(task)
             await asyncio.gather(*tasks, return_exceptions=False)

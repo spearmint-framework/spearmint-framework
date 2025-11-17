@@ -6,7 +6,6 @@ A framework for experimentation with LLMs and document processing.
 import asyncio
 import inspect
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -77,9 +76,25 @@ class Spearmint:
 
             @wraps(func)
             def swrapper(*args: Any, **kwargs: Any) -> Any:
-                result = ThreadPoolExecutor().submit(lambda: asyncio.run(awrapper(*args, **kwargs)))
-                r = result.result()
-                return r
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Already in an event loop, run the coroutine in a new thread
+                    # to avoid blocking the current loop
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(
+                            lambda: asyncio.run(awrapper(*args, **kwargs))
+                        )
+                        return future.result()
+                except RuntimeError:
+                    # No running loop, create one but preserve context
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        return loop.run_until_complete(awrapper(*args, **kwargs))
+                    finally:
+                        loop.close()
+                        asyncio.set_event_loop(None)
 
             return awrapper if inspect.iscoroutinefunction(func) else swrapper
 
