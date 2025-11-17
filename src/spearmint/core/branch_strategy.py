@@ -1,19 +1,19 @@
 import asyncio
+from collections.abc import Callable
 from copy import deepcopy
-import random
-from collections.abc import Generator
-from contextlib import AsyncExitStack
-from typing import Any, Callable
+from typing import Any
 
 from pydantic import BaseModel
 
 from .branch import Branch, BranchExecType
-from .run_wrapper import RunWrapper, on_run
 from .config import Config
+from .run_wrapper import RunWrapper
 
 
 class BranchStrategy(RunWrapper):
-    def __init__(self, func: Callable[..., Any], configs: list[Config], bindings: dict[str, Any]) -> None:
+    def __init__(
+        self, func: Callable[..., Any], configs: list[Config], bindings: dict[type[BaseModel], str]
+    ) -> None:
         self.branches: list[Branch] = self._create_branches(func, configs, bindings)
 
     @property
@@ -36,7 +36,7 @@ class BranchStrategy(RunWrapper):
     @property
     def parallel_branches(self) -> list[Branch]:
         return [branch for branch in self.branches if branch.exec_type == BranchExecType.PARALLEL]
-    
+
     @property
     def background_branches(self) -> list[Branch]:
         return [branch for branch in self.branches if branch.exec_type == BranchExecType.BACKGROUND]
@@ -64,12 +64,12 @@ class BranchStrategy(RunWrapper):
                 asyncio.create_task(branch.run(*args, **kwargs))
 
         return self.output
-    
+
     def _create_branches(
         self,
         func: Callable[..., Any],
         configs: list[Config],
-        bindings: dict[str, Any],
+        bindings: dict[type[BaseModel], str],
         *args: Any,
         **kwargs: Any,
     ) -> list[Branch]:
@@ -80,7 +80,7 @@ class BranchStrategy(RunWrapper):
             branches.append(branch)
         return branches
 
-    def _bind_config(self, config: Config, bindings: dict[str, Any]) -> list[BaseModel]:
+    def _bind_config(self, config: Config, bindings: dict[type[BaseModel], str]) -> list[BaseModel]:
         """Bind configs to model classes based on provided bindings.
 
         This method can be used to map configuration model instances
