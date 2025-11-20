@@ -77,7 +77,7 @@ class BranchStrategy(RunWrapper):
         branches = []
         for config in configs:
             bound_configs = self._bind_config(config, bindings)
-            branch = Branch(func=func, configs=bound_configs)
+            branch = Branch(func=func, config_id=config["config_id"], configs=bound_configs)
             branches.append(branch)
         return branches
 

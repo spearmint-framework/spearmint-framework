@@ -13,7 +13,6 @@ from config import (
 
 from spearmint import Config as DefaultMintConfig
 from spearmint import Spearmint
-from spearmint.core.context import current_scope
 from spearmint.strategies import (
     DefaultBranchStrategy as SingleConfigStrategy,
 )

@@ -4,9 +4,7 @@ from .core import (
     BranchExecType,
     Config,
     Spearmint,
-    experiment_decorator as experiment,
-    configure_decorator as configure, 
-
+    experiment,
 )
 
 __version__ = "0.3.0"
@@ -20,5 +18,4 @@ __all__ = [
     "BranchStrategy",
     "Spearmint",
     "experiment",
-    "configure",
 ]

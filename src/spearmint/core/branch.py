@@ -14,6 +14,7 @@ TODO:
 - Config object type normalization (Pydantic model vs dict)
 """
 
+import asyncio
 import inspect
 from collections.abc import Callable
 from enum import Enum
@@ -21,7 +22,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from .context import BranchScope, current_scope
+from .trace import trace_manager, fn_memo
 from .dependency_injector import inject_config
 from .run_wrapper import RunWrapper
 
@@ -44,33 +45,51 @@ class Branch(RunWrapper):
 
     default: bool = False
 
-    def __init__(self, func: Callable[..., Any], configs: list[BaseModel]) -> None:
+    def __init__(self, func: Callable[..., Any], config_id: str, configs: list[BaseModel]) -> None:
         self.func = func
         self.config_di_handler = inject_config
+        self.config_id = config_id
         self.configs = configs
         self.exec_type: BranchExecType = BranchExecType.PARALLEL
 
     async def run(self, *args: Any, **kwargs: Any) -> Any:
         """Run the branch with dependency-injected config."""
+        result: Any | None = None
         async with self.wrapped():
-            parent = current_scope.get()
-            scope = BranchScope(branch=self, parent=parent)
-            scope.data["func"] = self.func.__name__
-            parent.children.append(scope)
-            token = current_scope.set(scope)
-            try:
+            with trace_manager.start_trace(name="branch") as trace:
+                trace.data["func"] = self.func.__name__
+                trace.data["config_id"] = self.config_id
                 injected_args, injected_kwargs = self.config_di_handler(
                     self.func, self.configs, *args, **kwargs
                 )
-                scope.data["args"] = injected_args
-                scope.data["kwargs"] = injected_kwargs
+                trace.data["args"] = injected_args
+                trace.data["kwargs"] = injected_kwargs
                 if inspect.iscoroutinefunction(self.func):
                     result = await self.func(*injected_args, **injected_kwargs)
                 else:
                     result = self.func(*injected_args, **injected_kwargs)
-                scope.data["output"] = result
-            finally:
-                current_scope.reset(token)
+                trace.data["return_value"] = result
+                # TODO: Improve this with event loop hooks if possible
+                await asyncio.sleep(0.1)  # Yield control to allow trace export processing
+                child_branches = [b for b in trace.children if b.name == "branch"]
+
+            for child in child_branches[1:]:
+                print(f"Processing child branch trace: {child.data['func']} -> {child.data.get('return_value')}")
+                with trace_manager.start_trace(name="branch") as trace:
+                    trace.data["func"] = self.func.__name__
+                    trace.data["config_id"] = self.config_id
+                    trace.data["args"] = injected_args
+                    trace.data["kwargs"] = injected_kwargs
+                    token = fn_memo.set({
+                        child.data["func"]: child.data.get("return_value")
+                    })
+                    if inspect.iscoroutinefunction(self.func):
+                        result = await self.func(*injected_args, **injected_kwargs)
+                    else:
+                        result = self.func(*injected_args, **injected_kwargs)
+                    fn_memo.reset(token)
+                    trace.data["return_value"] = result
+
 
             self.output = result
 

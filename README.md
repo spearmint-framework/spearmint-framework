@@ -26,8 +26,8 @@ Strategies control *how* your configurations are executed:
 
 | Strategy | Behavior | Use Case |
 |----------|----------|----------|
-| **SingleConfigStrategy** | Runs one config | Default behavior, single execution path |
-| **ShadowStrategy** | Runs primary config in foreground, others in background | Test alternatives without blocking main flow |
+| **DefaultBranchStrategy** | Runs one config | Default behavior, single execution path |
+| **ShadowBranchStrategy** | Runs primary config in foreground, others in background | Test alternatives without blocking main flow |
 | **MultiBranchStrategy** | Runs all configs in parallel, returns all results | Get user feedback on multiple variants |
 | **RoundRobinStrategy** | Cycles through configs on each call | Multi-variate testing |
 
@@ -45,8 +45,7 @@ pip install spearmint-framework
 ### Basic Example
 
 ```python
-from spearmint import Spearmint
-from spearmint.config import Config
+from spearmint import Config, Spearmint
 
 # Initialize with a configuration
 mint = Spearmint(configs=[{"model": "gpt-4", "temperature": 0.7}])
@@ -69,7 +68,7 @@ from spearmint import Spearmint
 from spearmint.strategies import MultiBranchStrategy
 
 mint = Spearmint(
-    strategy=MultiBranchStrategy,
+    branch_strategy=MultiBranchStrategy,
     configs=[
         {"model": "gpt-4o", "temperature": 0.0},
         {"model": "gpt-4o", "temperature": 0.5},
@@ -98,7 +97,7 @@ for branch in branches:
 Generate multiple configurations from any iterable:
 
 ```python
-from spearmint.config import DynamicValue
+from spearmint.core.config import DynamicValue
 
 def temp_generator():
     for temp in range(0, 101, 50):
@@ -171,12 +170,11 @@ def generate(prompt: str, config: ModelConfig) -> str:
 Test new configurations without impacting your main code path:
 
 ```python
-from spearmint import Spearmint
-from spearmint.config import Config
-from spearmint.strategies import ShadowStrategy
+from spearmint import Config, Spearmint
+from spearmint.strategies import ShadowBranchStrategy
 
 mint = Spearmint(
-    strategy=ShadowStrategy,
+    branch_strategy=ShadowBranchStrategy,
     configs=[
         {"model": "gpt-4"},        # Primary (index 0)
         {"model": "gpt-5-beta"},   # Shadow
@@ -192,53 +190,6 @@ def api_call(query: str, config: Config) -> str:
 result = api_call("What is AI?")  # Uses gpt-4, logs gpt-5-beta in background
 ```
 
-### Offline Evaluation with Datasets
-
-Run experiments on datasets and evaluate results:
-
-```python
-from spearmint import Spearmint
-from spearmint.config import Config
-
-mint = Spearmint(configs=[{"id": 1}])
-
-@mint.experiment()
-def process_item(input_text: str, config: Config) -> str:
-    return f"{config['id']}-{input_text}"
-
-# Run on a dataset (JSONL file)
-results = mint.run(
-    func=process_item,
-    dataset="data/test_cases.jsonl"
-)
-# Each line in JSONL: {"input_text": "hello", "expected": "1-hello"}
-```
-
-### Custom Evaluators
-
-Evaluate experiment results with custom metrics:
-
-```python
-def accuracy(expected: str, trace: dict) -> float:
-    # Compare expected vs actual output
-    actual = trace['data']['spans'][0]['outputs']['output']
-    return 1.0 if expected == actual else 0.0
-
-mint = Spearmint(
-    configs=[{"id": 1}],
-)
-
-@mint.experiment(evaluators=[accuracy])
-def process(input_text: str, config: dict) -> str:
-    return f"{config['id']}-{input_text}"
-
-# Evaluators run automatically after dataset processing
-results = mint.run(
-    func=process,
-    dataset="data/test_cases.jsonl"
-)
-```
-
 ## Real-World Examples
 
 ### Example 1: FastAPI Experiment with Multiple Models
@@ -247,7 +198,8 @@ results = mint.run(
 from fastapi import FastAPI
 from spearmint import Spearmint
 from spearmint.strategies import ShadowStrategy
-from spearmint.config import Config, DynamicValue
+from spearmint import Config
+from spearmint.core.config import DynamicValue
 
 app = FastAPI()
 
@@ -281,7 +233,7 @@ async def _generate_summary(text: str, config: Config) -> str:
 
 ```python
 from spearmint import Spearmint
-from spearmint.config import Config
+from spearmint import Config
 from spearmint.strategies import MultiBranchStrategy
 
 mint = Spearmint(configs=[
@@ -289,7 +241,7 @@ mint = Spearmint(configs=[
     {"algorithm": "v2", "threshold": 0.7},
 ])
 
-@mint.experiment(strategy=MultiBranchStrategy)
+@mint.experiment(branch_strategy=MultiBranchStrategy)
 def process_document(doc_id: str, content: str, config: Config) -> dict:
     algo = config['algorithm']
     threshold = config['threshold']
@@ -303,30 +255,43 @@ def process_document(doc_id: str, content: str, config: Config) -> dict:
         "result": result
     }
 
-# Process a dataset
-results = mint.run(
-    func=process_document,
-    dataset="documents.jsonl"
-)
 ```
 
-## Tracing and Logging
+## Tracing and Telemetry
 
-Spearmint integrates with MLflow for automatic experiment tracking:
+Every experiment branch executes inside a `Trace`. A trace records metadata (`trace.attributes`), links to its parent, and captures outputs/exceptions. The trace tree is exposed via `spearmint.core.trace.trace_manager`, so you can plug in custom exporters or inspect the current trace from anywhere in your code.
+
+### Registering a custom exporter
 
 ```python
-import mlflow
+from spearmint.core.trace import TraceExporter, trace_manager
 
-# All functions decorated with @mint.experiment are logged to MLflow automatically
-# using the traces API.
+class StdoutExporter(TraceExporter):
+    def on_start(self, trace):
+        print(f"➡️  starting {trace.name} ({trace.trace_id})")
 
-# Experiment runs and evaluations use the data from traces to calculate metrics.
+    def on_end(self, trace, error):
+        status = "error" if error else "ok"
+        print(f"⬅️  finished {trace.name}: {status}")
 
-# Access traces programmatically
-traces = mlflow.search_traces()
-for trace in traces:
-    print(trace.to_dict())
+trace_manager.register_exporter(StdoutExporter())
 ```
+
+### OpenTelemetry support
+
+If you already collect traces with OpenTelemetry, install `opentelemetry-api` and enable the built-in exporter:
+
+```bash
+pip install opentelemetry-api
+```
+
+```python
+from spearmint.core.trace import OpenTelemetryTraceExporter, trace_manager
+
+trace_manager.register_exporter(OpenTelemetryTraceExporter())
+```
+
+Each Spearmint trace becomes a span (with args/output stored as attributes), so you can view experiment runs alongside the rest of your service telemetry.
 
 ## Configuration Files
 
@@ -354,10 +319,10 @@ mint = Spearmint(configs=["configs/"])
 
 ```python
 Spearmint(
-    strategy: type[Strategy] = SingleConfigStrategy,
-    configs: list[dict | Config | str | Path] = None,
-    bindings: dict[type[BaseModel], str] = None,
-    evaluators: Sequence[Callable] = None
+    branch_strategy: type[BranchStrategy] | None = None,
+    configs: list[dict | Config | str | Path] | None = None,
+    bindings: dict[type[BaseModel], str] | None = None,
+    evaluators: Sequence[Callable] | None = None,
 )
 ```
 
@@ -365,10 +330,10 @@ Spearmint(
 
 ```python
 @mint.experiment(
-    strategy: type[Strategy] = None,       # Override default strategy
-    configs: list = None,                  # Override default configs
-    bindings: dict = None,                 # Override default binding
-    evaluators: Sequence[Callable] = None  # Set custom evaluators
+    branch_strategy: type[BranchStrategy] | None = None,  # Override default strategy
+    configs: list | None = None,                          # Override default configs
+    bindings: dict | None = None,                        # Override default binding
+    evaluators: Sequence[Callable] | None = None,        # Set custom evaluators
 )
 ```
 
