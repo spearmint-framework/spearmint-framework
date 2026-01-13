@@ -10,6 +10,7 @@ from config import (
     my_dynamic_list_config,  # noqa: F401
     my_dynamic_range_config,  # noqa: F401
 )
+from nested import my_nested_fn  # noqa: F401
 
 from spearmint import Config as DefaultMintConfig
 from spearmint import Spearmint
@@ -25,8 +26,8 @@ from spearmint.strategies import (
 
 mint = Spearmint(
     # Uncomment exactly one of these strategies to see how it behaves.
-    branch_strategy=SingleConfigStrategy,  # Single branch execution (default)
-    # branch_strategy=ShadowBranchStrategy,  # Single branch execution (all other configs run in the background)
+    # branch_strategy=SingleConfigStrategy,  # Single branch execution (default)
+    branch_strategy=ShadowBranchStrategy,  # Single branch execution (all other configs run in the background)
     # branch_strategy=MultiBranchStrategy, # Multi-branch execution (all configs run in parallel and returned to caller)
     # branch_strategy=RoundRobinBranchStrategy,  # Single branch execution (configs selected in round-robin fashion)
     #
@@ -61,25 +62,31 @@ def step5(item: str) -> str:
     return f"final result for {item}"
 
 
-@mint.experiment()
-def step3point5(all_inputs: str) -> str:
+def step3point5() -> str:
     print("Inside step3.5")
-    return f"3.5****{all_inputs}****3.5"
+    score = my_nested_fn(42)
+    if score > 100:
+        return f"**3.500**"
+    else:
+        return f"==3.5=="
 
 
-@mint.experiment()
-async def async_step3point5(all_inputs: str) -> str:
+async def async_step3point5() -> str:
     await asyncio.sleep(0.1)
     print("Inside step3.5")
-    return f"3.5****{all_inputs}****3.5"
+    score = my_nested_fn(42)
+    if score > 100:
+        return f"**3.500**"
+    else:
+        return f"==3.5=="
 
 
 @mint.experiment()
 def step3(a: str, b: str, config: DefaultMintConfig) -> str:
     print("before step3point5")
-    print(step3point5(f"{a} and {b} and {config['id']}"))
+    c = step3point5()
     print("after step3point5")
-    return f"{config['id']}-{a} {config['id']}-{b}"
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
 # Decorator binds default Config model to the config parameter
@@ -87,42 +94,42 @@ def step3(a: str, b: str, config: DefaultMintConfig) -> str:
 async def async_step3(a: str, b: str, config: DefaultMintConfig) -> str:
     await asyncio.sleep(0.1)
     print("before step3point5")
-    print(await async_step3point5(f"{a} and {b} and {config['id']}"))
+    c = await async_step3point5()
     print("after step3point5")
-    return f"{config['id']}-{a} {config['id']}-{b}"
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
 # Decorator binds custom MyConfig model to the config parameter
 @mint.experiment(bindings={MyConfig: ""})
 def step3_default(a: str, b: str, config: MyConfig) -> str:
     print("before step3point5")
-    print(step3point5(f"{a} and {b} and {config.id}"))
+    c = step3point5()
     print("after step3point5")
-    return f"{config.id}-{a} {config.id}-{b}"
+    return f"{config.id}-{a} {config.id}-{b} {c}"
 
 
 @mint.experiment(branch_strategy=SingleConfigStrategy)
 def step3_single(a: str, b: str, config: DefaultMintConfig) -> str:
     print("before step3point5")
-    print(step3point5(f"{a} and {b} and {config['id']}"))
+    c = step3point5()
     print("after step3point5")
-    return f"{config['id']}-{a} {config['id']}-{b}"
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
 @mint.experiment(branch_strategy=ShadowBranchStrategy)
 def step3_shadow(a: str, b: str, config: DefaultMintConfig) -> str:
     print("before step3point5")
-    print(step3point5(f"{a} and {b} and {config['id']}"))
+    c = step3point5()
     print("after step3point5")
-    return f"{config['id']}-{a} {config['id']}-{b}"
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
 @mint.experiment(branch_strategy=RoundRobinBranchStrategy)
 def step3_round_robin(a: str, b: str, config: DefaultMintConfig) -> str:
     print("before step3point5")
-    print(step3point5(f"{a} and {b} and {config['id']}"))
+    c = step3point5()
     print("after step3point5")
-    return f"{config['id']}-{a} {config['id']}-{b}"
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
 @mint.experiment(branch_strategy=MultiBranchStrategy)
