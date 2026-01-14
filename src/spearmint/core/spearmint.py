@@ -100,51 +100,6 @@ class Spearmint:
 
         return decorator
 
-    def run(
-        self, func: Callable[..., Any], dataset: list[dict[str, Any]] | Path | str
-    ) -> list[dict[str, Any]]:
-        """Run a function with the loaded dataset and configurations.
-
-        Args:
-            func: The function to run.
-            skip_eval: If True, skip evaluation after running the experiment.
-        """
-        # # Error if func is not decorated with @experiment
-        # if not getattr(func, "spearmint_experiment", False):
-        #     raise ValueError("Function must be decorated with @experiment")
-
-        if isinstance(dataset, (str, Path)):
-            dataset = self._dataset_handler(dataset)
-
-        output_dataset: list[dict[str, Any]] = []
-        # for data_line in dataset:
-        #     kwargs = {}
-        #     for param in inspect.signature(func).parameters.keys():
-        #         if param in data_line:
-        #             kwargs[param] = data_line[param]
-
-        #     if inspect.iscoroutinefunction(func):
-        #         try:
-        #             loop = asyncio.get_running_loop()
-        #             result = loop.run_until_complete(func(**kwargs))
-        #         except RuntimeError:
-        #             result = asyncio.run(func(**kwargs))
-        #     else:
-        #         result = func(**kwargs)
-
-        #     output_data_line = deepcopy(data_line)
-        #     if isinstance(result, BranchContainer):
-        #         for branch in result.branches:
-        #             data_line_branch = deepcopy(output_data_line)
-        #             data_line_branch["output"] = branch.output
-        #             data_line_branch["config_id"] = branch.config_id
-        #             output_dataset.append(data_line_branch)
-        #     else:
-        #         output_data_line["output"] = result
-        #         output_dataset.append(output_data_line)
-
-        return output_dataset
-
 
 def experiment(
     branch_strategy: type[BranchStrategy],

@@ -6,4 +6,4 @@ from spearmint.strategies import ShadowBranchStrategy
     configs=[{"value": 1}, {"value": 10}],
 )
 def my_nested_fn(x: int, config: Config) -> int:
-    return x * config.get("value", 1)
+    return x * config["value"]

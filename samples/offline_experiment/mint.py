@@ -1,6 +1,8 @@
 import argparse
 import asyncio
 from collections.abc import Callable
+import json
+from pathlib import Path
 from pprint import pprint
 from typing import Any
 
@@ -14,7 +16,7 @@ from nested import my_nested_fn  # noqa: F401
 
 from spearmint import Config as DefaultMintConfig
 from spearmint import Spearmint
-from spearmint.core.context import current_scope
+from spearmint.core.context import current_scope, BranchScope
 from spearmint.strategies import (
     DefaultBranchStrategy as SingleConfigStrategy,
 )
@@ -63,7 +65,6 @@ def step5(item: str) -> str:
 
 
 def step3point5() -> str:
-    print("Inside step3.5")
     score = my_nested_fn(42)
     if score > 100:
         return f"**3.500**"
@@ -73,7 +74,6 @@ def step3point5() -> str:
 
 async def async_step3point5() -> str:
     await asyncio.sleep(0.1)
-    print("Inside step3.5")
     score = my_nested_fn(42)
     if score > 100:
         return f"**3.500**"
@@ -83,9 +83,7 @@ async def async_step3point5() -> str:
 
 @mint.experiment()
 def step3(a: str, b: str, config: DefaultMintConfig) -> str:
-    print("before step3point5")
     c = step3point5()
-    print("after step3point5")
     return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
@@ -93,42 +91,32 @@ def step3(a: str, b: str, config: DefaultMintConfig) -> str:
 @mint.experiment()
 async def async_step3(a: str, b: str, config: DefaultMintConfig) -> str:
     await asyncio.sleep(0.1)
-    print("before step3point5")
     c = await async_step3point5()
-    print("after step3point5")
     return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
 # Decorator binds custom MyConfig model to the config parameter
 @mint.experiment(bindings={MyConfig: ""})
 def step3_default(a: str, b: str, config: MyConfig) -> str:
-    print("before step3point5")
     c = step3point5()
-    print("after step3point5")
     return f"{config.id}-{a} {config.id}-{b} {c}"
 
 
 @mint.experiment(branch_strategy=SingleConfigStrategy)
 def step3_single(a: str, b: str, config: DefaultMintConfig) -> str:
-    print("before step3point5")
     c = step3point5()
-    print("after step3point5")
     return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
 @mint.experiment(branch_strategy=ShadowBranchStrategy)
 def step3_shadow(a: str, b: str, config: DefaultMintConfig) -> str:
-    print("before step3point5")
     c = step3point5()
-    print("after step3point5")
     return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
 @mint.experiment(branch_strategy=RoundRobinBranchStrategy)
 def step3_round_robin(a: str, b: str, config: DefaultMintConfig) -> str:
-    print("before step3point5")
     c = step3point5()
-    print("after step3point5")
     return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
@@ -160,7 +148,6 @@ def main(step1_input: str, step2_input: str, example: str) -> Any:
         for item in d:
             results.append(step5(item))
 
-        print(results, end="\n\n")
         return results
 
     if example == "multi":
@@ -193,48 +180,124 @@ if __name__ == "__main__":
         default="default",
         choices=["single", "shadow", "roundrobin", "multi", "default", "async"],
     )
+    parser.add_argument("--dataset", "-d", default=Path("samples/offline_experiment/data/step_input.jsonl"))
     args = parser.parse_args()
+    
+    data = []
+    if args.dataset:
+        with open(args.dataset, "r") as f:
+            for line in f:
+                data.append(json.loads(line))
+    else:
+        data = [{
+            "step1_input": args.step1_input,
+            "step2_input": args.step2_input,
+            "example": args.example,
+        }]
 
-    # root = current_scope.get()
-    # scope = BranchScope(branch=None, parent=root)
-    # token = current_scope.set(scope)
 
-    try:
-        results = main(
-            step1_input=args.step1_input,
-            step2_input=args.step2_input,
-            example=args.example,
+    print("============================================")
+    print("# Running experiment runner with dataset input")
+    print("============================================")
+
+
+    for record in data:
+        root = current_scope.get()
+        scope = BranchScope(branch=None, parent=root)
+        token = current_scope.set(scope)
+        try:
+            print("------------------------------------------------")
+            result = main(
+                step1_input=record["step1_input"],
+                step2_input=record["step2_input"],
+                example=record["example"],
+            )
+            pprint(result, indent=2)
+
+
+            scope = current_scope.get()
+            print(f"[{scope.__class__.__name__}]")
+            for child in root.children:
+                print(f"**{child.data}")
+                for grandchild in child.children:
+                    print(f"****{grandchild.data}")
+        finally:
+            current_scope.reset(token)
+
+
+def example_experiment() -> None:
+    """Example function to illustrate usage of mint.experiment decorator."""
+    async with mint.run(main) as runner:
+        results = await runner(
+            step1_input="example_step1",
+            step2_input="example_step2",
+            example="default",
         )
-
-        print("============================================")
-        print("# Running experiment runner with dataset input")
-        print("============================================")
-
-        # results = mint.run(
-        #     main,
-        #     dataset=[
-        #         {
-        #             "step1_input": args.step1_input,
-        #             "step2_input": args.step2_input,
-        #             "example": args.example,
-        #         },
-        #         {"step1_input": "foo", "step2_input": "bar", "example": args.example},
-        #     ],
-        # )
-
-        # results = mint.run(
-        #     main,
-        #     dataset="samples/offline_experiment/data/step_input.jsonl",
-        # )
-
+        # Expected output:
+        results = [
+            {
+                "config_chain": [
+                    "config1",
+                    "configA"
+                ],
+                "outputs": {
+                    "config1": {
+                        "output": "final result for 1-example_step1 1-example_step2 ==3.5==",
+                        "default": True,
+                    },
+                    "configA": {
+                        "output": "==3.5==",
+                        "default": True,
+                    }
+                },
+            },
+            {
+                "config_chain": [
+                    "config1",
+                    "configB"
+                ],
+                "outputs": {
+                    "config1": {
+                        "output": "final result for 1-example_step1 1-example_step2 **3.500**",
+                        "default": True,
+                    },
+                    "configB": {
+                        "output": "**3.500**",
+                        "default": False,
+                    }
+                },
+            },
+            {
+                "config_chain": [
+                    "config2",
+                    "configA"
+                ],
+                "outputs": {
+                    "config2": {
+                        "output": "final result for 2-example_step1 2-example_step2 ==3.5==",
+                        "default": False,
+                    },
+                    "configA": {
+                        "output": "==3.5==",
+                        "default": True,
+                    }
+                },
+            },
+            {
+                "config_chain": [
+                    "config2",
+                    "configB"
+                ],
+                "outputs": {
+                    "config2": {
+                        "output": "final result for 2-example_step1 2-example_step2 **3.500**",
+                        "default": False,
+                    },
+                    "configB": {
+                        "output": "**3.500**",
+                        "default": False,
+                    }
+                },
+            },
+        ]
         pprint(results, indent=2)
-
-        scope = current_scope.get()
-        print(f"[{scope.__class__.__name__}]")
-        for child in scope.children:
-            print(f" {child.data}")
-            for grandchild in child.children:
-                print(f"    {grandchild.data}")
-    finally:
-        # current_scope.reset(token)
-        pass
