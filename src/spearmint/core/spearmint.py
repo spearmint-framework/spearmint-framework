@@ -12,8 +12,10 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from spearmint.core import BranchStrategy, Config
-from spearmint.core.config import parse_configs
+from spearmint.core.branch_strategy import BranchStrategy
+from spearmint.core.config import Config, parse_configs
+from spearmint.core.introspection import ExperimentIntrospector, ExperimentPlan
+from spearmint.core.plan_executor import PlanExecutor, get_assigned_config_id
 from spearmint.core.run_session import RunSession
 from spearmint.core.utils.handlers import jsonl_handler, yaml_handler
 from spearmint.strategies import DefaultBranchStrategy
@@ -71,6 +73,79 @@ class Spearmint:
             func=func,
             return_all=return_all,
             wait_for_background=wait_for_background,
+        )
+
+    def plan(
+        self,
+        entry_file: Path | str,
+        entry_func: str | None = None,
+        *,
+        follow_imports: bool = True,
+        repo_root: Path | str | None = None,
+    ) -> ExperimentPlan:
+        """Analyze source code to build a precomputed experiment plan.
+
+        This performs static analysis to discover all experiment-decorated
+        functions, their configurations, and call relationships. The resulting
+        plan enumerates all execution paths with pre-assigned config IDs.
+
+        Args:
+            entry_file: Path to the Python file containing the entry point.
+            entry_func: Name of the entry function (uses first found if None).
+            follow_imports: If True, follow imports to discover more experiments.
+            repo_root: Repository root for resolving imports. Defaults to cwd.
+
+        Returns:
+            ExperimentPlan with enumerated paths and config assignments.
+
+        Example:
+            >>> plan = mint.plan("main.py", "run_experiment")
+            >>> print(f"Found {len(plan.paths)} execution paths")
+            >>> for path in plan.paths:
+            ...     print(f"  {path.path_id}: {path.config_assignments}")
+        """
+        entry_path = Path(entry_file)
+        root = Path(repo_root) if repo_root else None
+
+        introspector = ExperimentIntrospector(repo_root=root)
+        return introspector.build_plan(
+            entry_file=entry_path,
+            entry_func=entry_func,
+            follow_imports=follow_imports,
+        )
+
+    def run_plan(
+        self,
+        plan: ExperimentPlan,
+        entry_func: Callable[..., Any],
+        *,
+        max_workers: int | None = None,
+    ) -> "PlanRunner":
+        """Create a PlanRunner for executing a precomputed plan.
+
+        This executes all paths in the plan in parallel, with each path
+        using its pre-assigned config IDs. This ensures nested experiments
+        follow all paths instead of just returning the foreground response.
+
+        Args:
+            plan: The precomputed experiment plan from mint.plan().
+            entry_func: The entry point function to execute.
+            max_workers: Maximum parallel workers (default: number of paths).
+
+        Returns:
+            A PlanRunner async context manager.
+
+        Example:
+            >>> plan = mint.plan("main.py", "run_experiment")
+            >>> async with mint.run_plan(plan, run_experiment) as runner:
+            ...     results = await runner(input_data="test")
+            ...     for r in results.path_results:
+            ...         print(f"{r.path_id}: {r.output}")
+        """
+        return PlanRunner(
+            plan=plan,
+            entry_func=entry_func,
+            max_workers=max_workers,
         )
 
     def experiment(
@@ -207,3 +282,66 @@ def configure(
         configs=configs,
         bindings=bindings,
     )
+
+
+class PlanRunner:
+    """Async context manager for executing a precomputed experiment plan.
+
+    Executes all paths in the plan in parallel, ensuring nested experiments
+    follow all paths by using pre-assigned config IDs.
+
+    Example:
+        >>> plan = mint.plan("main.py", "run_experiment")
+        >>> async with mint.run_plan(plan, run_experiment) as runner:
+        ...     results = await runner(input_data="test")
+    """
+
+    def __init__(
+        self,
+        plan: ExperimentPlan,
+        entry_func: Callable[..., Any],
+        max_workers: int | None = None,
+    ) -> None:
+        """Initialize the PlanRunner.
+
+        Args:
+            plan: The precomputed experiment plan.
+            entry_func: The entry point function to execute.
+            max_workers: Maximum parallel workers.
+        """
+        self.plan = plan
+        self.entry_func = entry_func
+        self.max_workers = max_workers
+        self._executor: PlanExecutor | None = None
+
+    async def __aenter__(self) -> "PlanRunner":
+        """Enter the async context."""
+        self._executor = PlanExecutor(
+            plan=self.plan,
+            max_workers=self.max_workers,
+        )
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
+        """Exit the async context."""
+        self._executor = None
+
+    async def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Execute all paths in the plan.
+
+        Args:
+            *args: Positional arguments to pass to the entry function.
+            **kwargs: Keyword arguments to pass to the entry function.
+
+        Returns:
+            PlanExecutionResult with results from all paths.
+        """
+        if self._executor is None:
+            raise RuntimeError("PlanRunner must be used as async context manager")
+
+        return await self._executor.execute(self.entry_func, *args, **kwargs)
