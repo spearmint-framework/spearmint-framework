@@ -170,6 +170,32 @@ def main(step1_input: str, step2_input: str, example: str) -> Any:
         return branches
 
 
+async def example_experiment(data: list[dict]) -> None:
+    """Example function to illustrate usage of mint.experiment decorator."""
+    for record in data:
+        root = current_scope.get()
+        scope = BranchScope(branch=None, parent=root)
+        token = current_scope.set(scope)
+        try:
+            print("------------------------------------------------")
+            async with mint.run(main) as runner:
+                result = await runner(
+                    step1_input=record["step1_input"],
+                    step2_input=record["step2_input"],
+                    example=record["example"],
+                )
+            pprint(result, indent=2)
+
+
+            scope = current_scope.get()
+            print(f"[{scope.__class__.__name__}]")
+            for child in root.children:
+                print(f"**{child.data}")
+                for grandchild in child.children:
+                    print(f"****{grandchild.data}")
+        finally:
+            current_scope.reset(token)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--step1-input", "-s1", default="step1")
@@ -200,104 +226,4 @@ if __name__ == "__main__":
     print("# Running experiment runner with dataset input")
     print("============================================")
 
-
-    for record in data:
-        root = current_scope.get()
-        scope = BranchScope(branch=None, parent=root)
-        token = current_scope.set(scope)
-        try:
-            print("------------------------------------------------")
-            result = main(
-                step1_input=record["step1_input"],
-                step2_input=record["step2_input"],
-                example=record["example"],
-            )
-            pprint(result, indent=2)
-
-
-            scope = current_scope.get()
-            print(f"[{scope.__class__.__name__}]")
-            for child in root.children:
-                print(f"**{child.data}")
-                for grandchild in child.children:
-                    print(f"****{grandchild.data}")
-        finally:
-            current_scope.reset(token)
-
-
-def example_experiment() -> None:
-    """Example function to illustrate usage of mint.experiment decorator."""
-    async with mint.run(main) as runner:
-        results = await runner(
-            step1_input="example_step1",
-            step2_input="example_step2",
-            example="default",
-        )
-        # Expected output:
-        results = [
-            {
-                "config_chain": [
-                    "config1",
-                    "configA"
-                ],
-                "outputs": {
-                    "config1": {
-                        "output": "final result for 1-example_step1 1-example_step2 ==3.5==",
-                        "default": True,
-                    },
-                    "configA": {
-                        "output": "==3.5==",
-                        "default": True,
-                    }
-                },
-            },
-            {
-                "config_chain": [
-                    "config1",
-                    "configB"
-                ],
-                "outputs": {
-                    "config1": {
-                        "output": "final result for 1-example_step1 1-example_step2 **3.500**",
-                        "default": True,
-                    },
-                    "configB": {
-                        "output": "**3.500**",
-                        "default": False,
-                    }
-                },
-            },
-            {
-                "config_chain": [
-                    "config2",
-                    "configA"
-                ],
-                "outputs": {
-                    "config2": {
-                        "output": "final result for 2-example_step1 2-example_step2 ==3.5==",
-                        "default": False,
-                    },
-                    "configA": {
-                        "output": "==3.5==",
-                        "default": True,
-                    }
-                },
-            },
-            {
-                "config_chain": [
-                    "config2",
-                    "configB"
-                ],
-                "outputs": {
-                    "config2": {
-                        "output": "final result for 2-example_step1 2-example_step2 **3.500**",
-                        "default": False,
-                    },
-                    "configB": {
-                        "output": "**3.500**",
-                        "default": False,
-                    }
-                },
-            },
-        ]
-        pprint(results, indent=2)
+    asyncio.run(example_experiment(data))

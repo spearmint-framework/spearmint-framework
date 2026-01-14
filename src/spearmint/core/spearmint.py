@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from spearmint.core import BranchStrategy, Config
 from spearmint.core.config import parse_configs
+from spearmint.core.run_session import RunSession
 from spearmint.core.utils.handlers import jsonl_handler, yaml_handler
 from spearmint.strategies import DefaultBranchStrategy
 
@@ -34,6 +35,43 @@ class Spearmint:
         self.configs: list[Config] = parse_configs(configs or [], self._config_handler)
         self.bindings: dict[type[BaseModel], str] = {Config: ""} if bindings is None else bindings
         self.evaluators: list[Callable[..., Any]] = evaluators or []
+
+    def run(
+        self,
+        func: Callable[..., Any],
+        *,
+        return_all: bool = True,
+        wait_for_background: bool = True,
+    ) -> RunSession:
+        """Create a RunSession context manager for executing an experiment.
+
+        This provides an ergonomic API for running experiments and collecting
+        results from all branches in a structured format.
+
+        Args:
+            func: The main function to execute within the experiment context.
+            return_all: If True, return results from all branches formatted
+                       as a list of records with config_chain and outputs.
+                       If False, return only the default branch output.
+            wait_for_background: If True, wait for background branches to
+                                complete before returning results.
+
+        Returns:
+            A RunSession async context manager.
+
+        Example:
+            >>> async with mint.run(main) as runner:
+            ...     results = await runner(
+            ...         step1_input="example",
+            ...         step2_input="data",
+            ...     )
+            ...     # results is a list of branch records
+        """
+        return RunSession(
+            func=func,
+            return_all=return_all,
+            wait_for_background=wait_for_background,
+        )
 
     def experiment(
         self,
@@ -76,25 +114,31 @@ class Spearmint:
 
             @wraps(func)
             def swrapper(*args: Any, **kwargs: Any) -> Any:
+                import contextvars
+                
+                # Capture the current context to propagate to the async execution
+                ctx = contextvars.copy_context()
+                
+                async def run_with_context() -> Any:
+                    return await awrapper(*args, **kwargs)
+                
                 try:
                     loop = asyncio.get_running_loop()
-                    # Already in an event loop, run the coroutine in a new thread
-                    # to avoid blocking the current loop
+                    # Already in an event loop - we need to run in the same loop
+                    # Use asyncio.ensure_future and run until complete won't work
+                    # Instead, we need to schedule and wait
                     import concurrent.futures
+                    
+                    def run_in_new_loop() -> Any:
+                        # Run with copied context
+                        return ctx.run(asyncio.run, run_with_context())
+                    
                     with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(
-                            lambda: asyncio.run(awrapper(*args, **kwargs))
-                        )
+                        future = executor.submit(run_in_new_loop)
                         return future.result()
                 except RuntimeError:
-                    # No running loop, create one but preserve context
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        return loop.run_until_complete(awrapper(*args, **kwargs))
-                    finally:
-                        loop.close()
-                        asyncio.set_event_loop(None)
+                    # No running loop - run with context preserved
+                    return ctx.run(asyncio.run, run_with_context())
 
             return awrapper if inspect.iscoroutinefunction(func) else swrapper
 

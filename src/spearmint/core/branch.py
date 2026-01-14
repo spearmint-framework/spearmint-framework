@@ -44,11 +44,25 @@ class Branch(RunWrapper):
 
     default: bool = False
 
-    def __init__(self, func: Callable[..., Any], configs: list[BaseModel]) -> None:
+    def __init__(self, func: Callable[..., Any], configs: list[BaseModel], config_id: str) -> None:
         self.func = func
         self.config_di_handler = inject_config
         self.configs = configs
+        self.config_id = config_id
         self.exec_type: BranchExecType = BranchExecType.PARALLEL
+        self.output: Any = None
+
+    def as_record(self) -> dict[str, Any]:
+        """Return a dictionary representation of the branch result.
+
+        Returns:
+            A dict with config_id, default status, and output.
+        """
+        return {
+            "config_id": self.config_id,
+            "default": self.default,
+            "output": self.output,
+        }
 
     async def run(self, *args: Any, **kwargs: Any) -> Any:
         """Run the branch with dependency-injected config."""

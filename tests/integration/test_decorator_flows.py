@@ -14,6 +14,7 @@ Test Coverage:
 8. Async function decoration
 9. Sync function decoration
 10. Nested decorated functions
+11. RunSession context manager with return_all
 """
 
 import asyncio
@@ -719,3 +720,164 @@ class TestDecoratorReturnValues:
 
         assert isinstance(result, tuple)
         assert result == (42, "single", 42)
+
+
+class TestRunSessionContextManager:
+    """Test the mint.run() async context manager API."""
+
+    @pytest.mark.asyncio
+    async def test_run_session_returns_all_branches(self, sample_configs):
+        """RunSession with return_all=True returns all branch results."""
+
+        sp = Spearmint(
+            branch_strategy=MultiBranchStrategy,
+            configs=sample_configs,
+        )
+
+        @sp.experiment()
+        def inner_func(value: str, config: Config) -> str:
+            return f"{value}_{config['id']}"
+
+        def main_func(value: str) -> str:
+            return inner_func(value)
+
+        async with sp.run(main_func, return_all=True) as runner:
+            results = await runner("test")
+
+        # Results should be a list of branch records
+        assert isinstance(results, list)
+        # Should have branch paths for each config
+        assert len(results) >= 1
+
+    @pytest.mark.asyncio
+    async def test_run_session_return_all_false(self, sample_configs):
+        """RunSession with return_all=False returns only default output."""
+
+        sp = Spearmint(
+            branch_strategy=DefaultBranchStrategy,
+            configs=sample_configs,
+        )
+
+        @sp.experiment()
+        def inner_func(value: str, config: Config) -> str:
+            return f"{value}_{config['id']}"
+
+        def main_func(value: str) -> str:
+            return inner_func(value)
+
+        async with sp.run(main_func, return_all=False) as runner:
+            result = await runner("test")
+
+        # Should return the raw output, not formatted branches
+        assert result == "test_config_0"
+
+    @pytest.mark.asyncio
+    async def test_run_session_with_async_main(self, single_config):
+        """RunSession works with async main function."""
+
+        sp = Spearmint(
+            branch_strategy=DefaultBranchStrategy,
+            configs=single_config,
+        )
+
+        @sp.experiment()
+        async def inner_func(value: str, config: Config) -> str:
+            await asyncio.sleep(0.01)
+            return f"{value}_{config['id']}"
+
+        async def main_func(value: str) -> str:
+            return await inner_func(value)
+
+        async with sp.run(main_func, return_all=False) as runner:
+            result = await runner("async_test")
+
+        assert result == "async_test_single"
+
+    @pytest.mark.asyncio
+    async def test_run_session_multiple_calls(self, sample_configs):
+        """RunSession can be called multiple times."""
+
+        sp = Spearmint(
+            branch_strategy=DefaultBranchStrategy,
+            configs=sample_configs,
+        )
+
+        @sp.experiment()
+        def inner_func(x: int, config: Config) -> int:
+            return x * int(config["temperature"] * 10)
+
+        def main_func(x: int) -> int:
+            return inner_func(x)
+
+        async with sp.run(main_func, return_all=False) as runner:
+            result1 = await runner(5)
+            result2 = await runner(10)
+
+        assert result1 == 35  # 5 * 7 (0.7 * 10)
+        assert result2 == 70  # 10 * 7
+
+    @pytest.mark.asyncio
+    async def test_run_session_branch_results_structure(self):
+        """Verify the structure of branch results from RunSession."""
+
+        configs = [
+            {"config_id": "config_a", "value": 10},
+            {"config_id": "config_b", "value": 20},
+        ]
+
+        sp = Spearmint(
+            branch_strategy=MultiBranchStrategy,
+            configs=configs,
+        )
+
+        @sp.experiment()
+        def inner_func(x: int, config: Config) -> int:
+            return x * config["value"]
+
+        def main_func(x: int) -> int:
+            return inner_func(x)
+
+        async with sp.run(main_func, return_all=True) as runner:
+            results = await runner(2)
+
+        # Each result should have config_chain and outputs
+        assert isinstance(results, list)
+        for result in results:
+            if result:  # Skip empty results
+                assert "config_chain" in result
+                assert "outputs" in result
+                assert isinstance(result["config_chain"], list)
+                assert isinstance(result["outputs"], dict)
+
+    @pytest.mark.asyncio
+    async def test_run_session_shadow_strategy_wait_for_background(self):
+        """RunSession with ShadowBranchStrategy tracks background execution."""
+
+        configs = [
+            {"config_id": "default", "value": 1},
+            {"config_id": "shadow", "value": 2},
+        ]
+
+        sp = Spearmint(
+            branch_strategy=ShadowBranchStrategy,
+            configs=configs,
+        )
+
+        execution_order = []
+
+        @sp.experiment()
+        async def inner_func(x: int, config: Config) -> int:
+            await asyncio.sleep(0.01)
+            execution_order.append(config["config_id"])
+            return x * config["value"]
+
+        async def main_func(x: int) -> int:
+            return await inner_func(x)
+
+        async with sp.run(main_func, return_all=True) as runner:
+            results = await runner(5)
+
+        # Default branch should have executed
+        assert "default" in execution_order
+        # Results should contain at least the default branch info
+        assert isinstance(results, list)

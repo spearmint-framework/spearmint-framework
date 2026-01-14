@@ -49,7 +49,27 @@ class BranchStrategy(RunWrapper):
     def output(self) -> Any:
         return self.default_branch.output
 
-    async def run(self, *args: Any, **kwargs: Any) -> Any:
+    async def run(
+        self,
+        *args: Any,
+        wait_for_background: bool = False,
+        return_all: bool = False,
+        **kwargs: Any,
+    ) -> Any:
+        """Run all branches according to their execution types.
+
+        Args:
+            *args: Positional arguments to pass to branch functions.
+            wait_for_background: If True, wait for background branches to complete.
+            return_all: If True, return list of all branches instead of default output.
+            **kwargs: Keyword arguments to pass to branch functions.
+
+        Returns:
+            If return_all is True, returns list of Branch objects.
+            Otherwise, returns the default branch output.
+        """
+        background_tasks: list[asyncio.Task[Any]] = []
+
         async with self.wrapped():
             for branch in self.sequential_branches:
                 await branch.run(*args, **kwargs)
@@ -62,7 +82,14 @@ class BranchStrategy(RunWrapper):
             await asyncio.gather(*tasks, return_exceptions=False)
 
             for branch in self.background_branches:
-                asyncio.create_task(branch.run(*args, **kwargs))
+                task = asyncio.create_task(branch.run(*args, **kwargs))
+                background_tasks.append(task)
+
+        if wait_for_background and background_tasks:
+            await asyncio.gather(*background_tasks, return_exceptions=True)
+
+        if return_all:
+            return self.branches
 
         return self.output
 
@@ -77,7 +104,7 @@ class BranchStrategy(RunWrapper):
         branches = []
         for config in configs:
             bound_configs = self._bind_config(config, bindings)
-            branch = Branch(func=func, configs=bound_configs)
+            branch = Branch(func=func, configs=bound_configs, config_id=config["config_id"])
             branches.append(branch)
         return branches
 
