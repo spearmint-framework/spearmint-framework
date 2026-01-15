@@ -173,9 +173,9 @@ def main(step1_input: str, step2_input: str, example: str) -> Any:
 async def example_experiment(data: list[dict]) -> None:
     """Example function to illustrate usage of mint.experiment decorator."""
     for record in data:
-        root = current_scope.get()
-        scope = BranchScope(branch=None, parent=root)
-        token = current_scope.set(scope)
+        # root = current_scope.get()
+        # scope = BranchScope(branch=None, parent=root)
+        # token = current_scope.set(scope)
         try:
             print("------------------------------------------------")
             async with mint.run(main) as runner:

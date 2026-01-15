@@ -7,24 +7,22 @@ import asyncio
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 import inspect
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import wraps
 from pathlib import Path
-from typing import Any, AsyncGenerator, AsyncIterator
+from typing import Annotated, Any, AsyncIterator
 
 from pydantic import BaseModel
 
-from spearmint.core.branch_strategy import BranchStrategy
-from spearmint.core.config import Config, parse_configs
-from spearmint.core.utils.handlers import yaml_handler
-from spearmint.strategies import DefaultBranchStrategy
-from experiment_enumerator import ExperimentEnumerator
+from .configuration import Config, parse_configs
+from .experiment_enumerator import ConfigPath, ExperimentEnumerator, Experiment, inject_config
+from .utils.handlers import yaml_handler
 
 global experiment_enumerator
 experiment_enumerator = ExperimentEnumerator()
 
-current_path_config: ContextVar[dict[str, str]] = ContextVar(
-    "spearmint_path_config", default={}
+current_path_config: ContextVar[ConfigPath | None] = ContextVar(
+    "spearmint_path_config", default=None
 )
 
 class Spearmint:
@@ -32,18 +30,18 @@ class Spearmint:
 
     def __init__(
         self,
-        branch_strategy: type[BranchStrategy] | None = None,
+        branch_strategy: Callable[..., tuple[Config, list[Config]]] | None = None,
         configs: list[dict[str, Any] | Config | str | Path] | None = None,
         bindings: dict[type[BaseModel], str] | None = None,
     ) -> None:
         self._config_handler: Callable[[str | Path], list[dict[str, Any]]] = yaml_handler
-        self.branch_strategy: type[BranchStrategy] = branch_strategy or DefaultBranchStrategy
+        self.branch_strategy: Callable[..., tuple[Config, list[Config]]] | None = branch_strategy
         self.configs: list[Config] = parse_configs(configs or [], self._config_handler)
         self.bindings: dict[type[BaseModel], str] = {Config: ""} if bindings is None else bindings
 
     def experiment(
         self,
-        branch_strategy: type[BranchStrategy] | None = None,
+        branch_strategy: Callable[..., tuple[Config, list[Config]]] | None = None,
         configs: list[dict[str, Any] | Config | str | Path] | None = None,
         bindings: dict[type[BaseModel], str] | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -54,12 +52,8 @@ class Spearmint:
         bindings = {Config: ""} if bindings is None else bindings
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            experiment_enumerator.register_experiment(
-                fn=func,
-                main_handler=branch_strategy,
-                background_handler=branch_strategy,
-                configs=parsed_configs
-            )
+            experiment = Experiment(func=func, configs=parsed_configs)
+            experiment_enumerator.register_experiment(experiment)
 
             @wraps(func)
             async def awrapper(*args: Any, **kwargs: Any) -> Any:
@@ -101,41 +95,41 @@ class Spearmint:
     
     @staticmethod
     @asynccontextmanager
-    async def run(func: Callable[..., Any]) -> AsyncIterator[Any]:
+    async def run(func: Callable[..., Any], wait_for_variants: bool = False) -> AsyncIterator["Spearmint.run.Runner"]:
         """Run the given function as an experiment."""
         class Runner:
-            def __init__(self, fn: Callable[..., Any], wait_for_variants: bool = False) -> None:
-                self.main_config: dict[str, str] = {}
-                self.variant_configs: list[dict[str, str]] = []
+            def __init__(self, func: Callable[..., Any], main_config: ConfigPath, variant_configs: list[ConfigPath] = [], wait_for_variants: bool = False) -> None:
+                self.main_config: ConfigPath = main_config
+                self.variant_configs: list[ConfigPath] = variant_configs
                 self.main_result: Any = None
                 self.variant_results: list[Any] = []
                 self.wait_for_variants: bool = wait_for_variants
-                self.fn = fn
+                self.func = func
             
             async def __call__(self, *args: Any, **kwargs: Any) -> Any:
-                config_path = current_path_config.get()
-                if config_path:
-                    injected_args, injected_kwargs = self.config_di_handler(
-                        self.fn, config_path, *args, **kwargs
-                    )
-                    if inspect.iscoroutinefunction(self.fn):
-                        return await self.fn(*injected_args, **injected_kwargs)
-                    else:
-                        return self.fn(*injected_args, **injected_kwargs)
+                configs = self.main_config.bound_configs.get(self.func.__qualname__, [])
+                injected_args, injected_kwargs = inject_config(
+                    self.func, configs, *args, **kwargs
+                )
+                if inspect.iscoroutinefunction(self.func):
+                    self.main_result = await self.func(*injected_args, **injected_kwargs)
+                else:
+                    self.main_result = self.func(*injected_args, **injected_kwargs)
                 
                 tasks = []
-                for config_path in experiment_enumerator.get_config_paths(self.fn.__name__):
-                    token = current_path_config.set(config_path)
-                    try:
-                        if self.main_config == config_path:
-                            self.main_result = await self(*args, **kwargs)
-                        else:
-                            tasks.append(self(*args, **kwargs))
-                    finally:
-                        current_path_config.reset(token)
+
+                for variant_config in self.variant_configs:
+                    async def run_variant(config: ConfigPath) -> Any:
+                        token = current_path_config.set(config)
+                        try:
+                            return await Runner(self.func, main_config=config)(*args, **kwargs)
+                        finally:
+                            current_path_config.reset(token)
+                    task = asyncio.create_task(run_variant(variant_config))
+                    tasks.append(task)
                 
                 if self.wait_for_variants and tasks:
-                    self.variant_results = await asyncio.gather(*tasks)
+                    self.variant_results = [r.main_result for r in await asyncio.gather(*tasks)]
 
                 return self
 
@@ -145,13 +139,18 @@ class Spearmint:
             async def __aexit__(self, exc_type, exc, tb) -> None:
                 pass
 
-        yield Runner(func)
+        config_path = current_path_config.get()
+        if config_path:
+            yield Runner(func, main_config=config_path)
+        else:
+            main_config, variant_configs = experiment_enumerator.get_config_paths(func)
+            yield Runner(func, main_config=main_config, variant_configs=variant_configs, wait_for_variants=wait_for_variants)
 
 
 
 def experiment(
-    branch_strategy: type[BranchStrategy],
-    configs: list[dict[str, Any] | Config | str | Path],
+    branch_strategy: Callable[..., tuple[Config, list[Config]]] | None = None,
+    configs: Sequence[dict[str, Any] | Config | str | Path] | None = None,
     bindings: dict[type[BaseModel], str] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator for wrapping functions with experiment execution strategy.
