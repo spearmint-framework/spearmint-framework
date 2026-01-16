@@ -1,5 +1,0 @@
-id: test_config_2
-temperature: 0.5
-model: gpt-3.5-turbo
-max_tokens: 50
-multiplier: 4

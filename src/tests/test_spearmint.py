@@ -3,9 +3,9 @@ from typing import Annotated, Any
 
 import pytest
 
-from spearmint_v2 import Spearmint, Config, experiment
-from spearmint_v2.configuration import Bind
-from spearmint_v2.spearmint import current_experiment_case, experiment_fn_registry
+from spearmint import Spearmint, Config, experiment
+from spearmint.configuration import Bind
+from spearmint.spearmint import current_experiment_case, experiment_fn_registry
 
 
 class TestSpearmint:
