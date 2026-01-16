@@ -256,20 +256,21 @@ def _resolve_class_types(obj: Any) -> list[type]:
 class ExperimentFunctionRegistry:
     
     def __init__(self) -> None:
-        self.experiment_fns: dict[str, ExperimentFunction] = {}
+        self.experiment_fns: dict[Callable[..., Any], ExperimentFunction] = {}
 
     def register_experiment(
             self,
             experiment: ExperimentFunction,
         ) -> None:
-        self.experiment_fns[experiment.name] = experiment
+        self.experiment_fns[experiment.func] = experiment
         for registered_experiment in self.experiment_fns.values():
             registered_experiment.update_inner_calls(experiment)
             experiment.update_inner_calls(registered_experiment)
     
     def get_experiment(self, func: Callable[..., Any]) -> ExperimentFunction:
         """Get the ExperimentFunction for a given function."""
-        experiment = self.experiment_fns.get(func.__qualname__)
+        target = inspect.unwrap(func)
+        experiment = self.experiment_fns.get(target) or self.experiment_fns.get(func)
         if not experiment:
             raise ValueError(f"No experiment found for function '{func.__qualname__}'")
         return experiment
