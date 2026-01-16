@@ -11,6 +11,13 @@ from pydantic import BaseModel
 from .config import Config
 from .dynamic_value import DynamicValue
 
+class Bind:
+    """Class to indicate binding of configuration models to function parameters."""
+
+    def __init__(self, path: str) -> None:
+        """Initialize a new Bind instance."""
+        self.path = path
+
 
 def parse_configs(
     configs: list[Any], config_handler: Callable[[str | Path], list[dict[str, Any]]]
@@ -86,8 +93,7 @@ def _find_dynamic_values(
             p_keys.append(key)
             dynamic_values.append({"dynamic_value": value, "parent_keys": p_keys})
         elif isinstance(value, dict):
-            parent_keys.append(key)
-            nested_dynamic_values = _find_dynamic_values(value, parent_keys)
+            nested_dynamic_values = _find_dynamic_values(value, parent_keys + [key])
             if nested_dynamic_values:
                 dynamic_values.extend(nested_dynamic_values)
 

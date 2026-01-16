@@ -1,4 +1,4 @@
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from typing import Any, Generic, TypeVar
 
 from pydantic._internal._schema_generation_shared import CallbackGetCoreSchemaHandler
@@ -25,15 +25,11 @@ class DynamicValue(Generic[T]):
         """Return a string representation of the DynamicValue."""
         return f"DynamicValue({self.values})"
 
-    def __iter__(self) -> Iterable[T]:
+    def __iter__(self) -> Iterator[T]:
         """Return an iterator over the values."""
         return iter(self.values)
 
-    def __get_pydantic_core_schema__(cls, handler: CallbackGetCoreSchemaHandler) -> Any:
+    def __get_pydantic_core_schema__(self, handler: CallbackGetCoreSchemaHandler) -> Any:
         """Pydantic v2 core schema generation hook."""
-        print("Generating pydantic core schema for DynamicValue")
-
         schema = handler.generate_schema(T)
-
-        print("Generated schema:", schema)
         return schema

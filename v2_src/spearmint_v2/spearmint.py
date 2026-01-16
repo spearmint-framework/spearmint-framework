@@ -6,23 +6,89 @@ A framework for experimentation with LLMs and document processing.
 import asyncio
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
+from dataclasses import dataclass
 import inspect
-from collections.abc import Callable, Sequence
+from collections.abc import AsyncGenerator, Callable, Sequence
 from functools import wraps
 from pathlib import Path
-from typing import Annotated, Any, AsyncIterator
+from types import CoroutineType
+from typing import Any, AsyncIterator
 
 from pydantic import BaseModel
 
 from .configuration import Config, parse_configs
-from .experiment_enumerator import ConfigPath, ExperimentEnumerator, Experiment, inject_config
+from .experiment_function import ExperimentCase, ExperimentFunctionRegistry, ExperimentFunction
 from .utils.handlers import yaml_handler
 
-global experiment_enumerator
-experiment_enumerator = ExperimentEnumerator()
+global experiment_fn_registry
+experiment_fn_registry = ExperimentFunctionRegistry()
 
-current_path_config: ContextVar[ConfigPath | None] = ContextVar(
-    "spearmint_path_config", default=None
+current_experiment_case: ContextVar[ExperimentCase | None] = ContextVar(
+    "spearmint_experiment_case", default=None
+)
+
+
+@dataclass
+class FunctionResult:
+    result: Any
+    experiment_case: ExperimentCase
+
+@dataclass
+class ExperimentCaseResults:
+    main_result: FunctionResult
+    variant_results: list[FunctionResult]
+
+@asynccontextmanager
+async def _set_experiment_case(experiment_case: ExperimentCase):
+    token = current_experiment_case.set(experiment_case)
+    try:
+        yield
+    finally:
+        current_experiment_case.reset(token)
+
+class ExperimentRunner:
+    def __init__(self, entry_point_fn: ExperimentFunction, await_background_cases: bool = True) -> None:
+        self.entry_point_fn: ExperimentFunction = entry_point_fn
+        self.await_background_cases: bool = await_background_cases
+    
+    async def start(self, *args: Any, **kwargs: Any) -> ExperimentCaseResults:
+        main_case, variant_cases = self.entry_point_fn.get_experiment_cases()
+        async with _set_experiment_case(main_case):
+            main = await self.run_with_context(self.entry_point_fn)(*args, **kwargs)
+
+        tasks = []
+        for variant_case in variant_cases:
+            async with _set_experiment_case(variant_case):
+                tasks.append(asyncio.create_task(self.run_with_context(self.entry_point_fn)(*args, **kwargs)))
+        
+        variants: list[ExperimentCaseResults] = []
+        if self.await_background_cases:
+            variants = await asyncio.gather(*tasks)
+
+        main_result = main.main_result
+        variant_results = [v.main_result for v in variants]
+        
+
+        return ExperimentCaseResults(main_result=main_result, variant_results=variant_results)
+
+    
+    def run_with_context(self, exp: ExperimentFunction) -> Callable[..., CoroutineType[Any, Any, ExperimentCaseResults]]:
+        experiment_case = current_experiment_case.get()
+        
+        if experiment_case is None:
+            raise RuntimeError("No current experiment case set in context.")
+        
+        async def execute(*args: Any, **kwargs: Any) -> ExperimentCaseResults:
+            result = await exp(experiment_case, *args, **kwargs)
+            main_result = FunctionResult(result=result, experiment_case=experiment_case)
+            return ExperimentCaseResults(main_result=main_result, variant_results=[])
+        
+        return execute
+
+
+
+experiment_runner: ContextVar[ExperimentRunner | None] = ContextVar(
+    "spearmint_experiment_runner", default=None
 )
 
 class Spearmint:
@@ -32,34 +98,28 @@ class Spearmint:
         self,
         branch_strategy: Callable[..., tuple[Config, list[Config]]] | None = None,
         configs: list[dict[str, Any] | Config | str | Path] | None = None,
-        bindings: dict[type[BaseModel], str] | None = None,
     ) -> None:
-        self._config_handler: Callable[[str | Path], list[dict[str, Any]]] = yaml_handler
         self.branch_strategy: Callable[..., tuple[Config, list[Config]]] | None = branch_strategy
-        self.configs: list[Config] = parse_configs(configs or [], self._config_handler)
-        self.bindings: dict[type[BaseModel], str] = {Config: ""} if bindings is None else bindings
+        self.configs: list[Config] = parse_configs(configs or [], yaml_handler)
 
     def experiment(
         self,
         branch_strategy: Callable[..., tuple[Config, list[Config]]] | None = None,
         configs: list[dict[str, Any] | Config | str | Path] | None = None,
-        bindings: dict[type[BaseModel], str] | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator for wrapping functions with experiment execution strategy."""
         branch_strategy = branch_strategy or self.branch_strategy
-        bindings = bindings or self.bindings
         parsed_configs = parse_configs(configs or self.configs or [], yaml_handler)
-        bindings = {Config: ""} if bindings is None else bindings
 
         def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-            experiment = Experiment(func=func, configs=parsed_configs)
-            experiment_enumerator.register_experiment(experiment)
+            experiment = ExperimentFunction(func=func, configs=parsed_configs)
+            experiment_fn_registry.register_experiment(experiment)
 
             @wraps(func)
             async def awrapper(*args: Any, **kwargs: Any) -> Any:
                 async with Spearmint.run(func) as runner:
                     results = await runner(*args, **kwargs)
-                    return results.main_result
+                    return results.main_result.result
 
             @wraps(func)
             def swrapper(*args: Any, **kwargs: Any) -> Any:
@@ -95,63 +155,26 @@ class Spearmint:
     
     @staticmethod
     @asynccontextmanager
-    async def run(func: Callable[..., Any], wait_for_variants: bool = False) -> AsyncIterator["Spearmint.run.Runner"]:
+    async def run(func: Callable[..., Any], await_background_cases: bool = False):
         """Run the given function as an experiment."""
-        class Runner:
-            def __init__(self, func: Callable[..., Any], main_config: ConfigPath, variant_configs: list[ConfigPath] = [], wait_for_variants: bool = False) -> None:
-                self.main_config: ConfigPath = main_config
-                self.variant_configs: list[ConfigPath] = variant_configs
-                self.main_result: Any = None
-                self.variant_results: list[Any] = []
-                self.wait_for_variants: bool = wait_for_variants
-                self.func = func
-            
-            async def __call__(self, *args: Any, **kwargs: Any) -> Any:
-                configs = self.main_config.bound_configs.get(self.func.__qualname__, [])
-                injected_args, injected_kwargs = inject_config(
-                    self.func, configs, *args, **kwargs
-                )
-                if inspect.iscoroutinefunction(self.func):
-                    self.main_result = await self.func(*injected_args, **injected_kwargs)
-                else:
-                    self.main_result = self.func(*injected_args, **injected_kwargs)
-                
-                tasks = []
 
-                for variant_config in self.variant_configs:
-                    async def run_variant(config: ConfigPath) -> Any:
-                        token = current_path_config.set(config)
-                        try:
-                            return await Runner(self.func, main_config=config)(*args, **kwargs)
-                        finally:
-                            current_path_config.reset(token)
-                    task = asyncio.create_task(run_variant(variant_config))
-                    tasks.append(task)
-                
-                if self.wait_for_variants and tasks:
-                    self.variant_results = [r.main_result for r in await asyncio.gather(*tasks)]
-
-                return self
-
-            async def __aenter__(self) -> "Runner":
-                return self
-            
-            async def __aexit__(self, exc_type, exc, tb) -> None:
-                pass
-
-        config_path = current_path_config.get()
-        if config_path:
-            yield Runner(func, main_config=config_path)
+        experiment_fn = experiment_fn_registry.get_experiment(func)
+        
+        runner = experiment_runner.get()
+        if not runner:
+            runner = ExperimentRunner(entry_point_fn=experiment_fn, await_background_cases=await_background_cases)
+            token = experiment_runner.set(runner)
+            try:
+                yield runner.start
+            finally:
+                experiment_runner.reset(token)
         else:
-            main_config, variant_configs = experiment_enumerator.get_config_paths(func)
-            yield Runner(func, main_config=main_config, variant_configs=variant_configs, wait_for_variants=wait_for_variants)
-
+            yield runner.run_with_context(experiment_fn)
 
 
 def experiment(
+    configs: Sequence[dict[str, Any] | Config | str | Path],
     branch_strategy: Callable[..., tuple[Config, list[Config]]] | None = None,
-    configs: Sequence[dict[str, Any] | Config | str | Path] | None = None,
-    bindings: dict[type[BaseModel], str] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator for wrapping functions with experiment execution strategy.
 
@@ -159,7 +182,8 @@ def experiment(
     through the provided strategy, handling config injection and logging.
 
     Args:
-        strategy: Strategy instance to use for execution
+        configs: Sequence of configurations for the experiment
+        branch_strategy: Strategy instance to use for execution
 
     Returns:
         Decorator function
@@ -172,8 +196,7 @@ def experiment(
         >>> result = await my_func(10)
     """
     spearmint_instance = Spearmint(
-        branch_strategy=branch_strategy,
         configs=configs,
-        bindings=bindings,
+        branch_strategy=branch_strategy,
     )
     return spearmint_instance.experiment()
