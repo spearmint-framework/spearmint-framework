@@ -399,6 +399,18 @@ branch.exception_info  # Error details if failed
 - One-off scripts with no variants
 - Performance-critical hot paths (adds overhead)
 
+## Roadmap
+- Integrate tracing capabilities
+- Add evaluation to experiment lifecycle
+- Add hooks for customizing behavior
+- More built-in strategies
+  - Sampling-based strategies
+  - Adaptive strategies based on results
+- Common config types (e.g., OpenAIModelConfig, DocumentIntelligenceParseConfig)
+- Azure-specific examples (Foundry Traces, Application Configuration A/B test (preview))
+- Enhance typing and IDE support with generics
+- Better documentation and examples
+
 ## Contributing
 
 Contributions welcome!

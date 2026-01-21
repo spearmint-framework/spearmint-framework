@@ -1,34 +1,44 @@
 import argparse
 import asyncio
+from collections.abc import Callable
+import json
+from pathlib import Path
 from pprint import pprint
+from typing import Any
 
 from config import (
-    MyConfig,
+    MyConfig,  # noqa: F401
+    my_dynamic_generator_config,  # noqa: F401
+    my_dynamic_list_config,  # noqa: F401
+    my_dynamic_range_config,  # noqa: F401
 )
+from nested import my_nested_fn  # noqa: F401
 
+from spearmint import Config as DefaultMintConfig
 from spearmint import Spearmint
-from spearmint.branch import BranchContainer
-from spearmint.config import Config as DefaultMintConfig
+from spearmint.core.context import current_scope, BranchScope
+from spearmint.strategies import (
+    DefaultBranchStrategy as SingleConfigStrategy,
+)
 from spearmint.strategies import (
     MultiBranchStrategy,
-    RoundRobinStrategy,
-    ShadowStrategy,
-    SingleConfigStrategy,
+    RoundRobinBranchStrategy,
+    ShadowBranchStrategy,
 )
 
 mint = Spearmint(
     # Uncomment exactly one of these strategies to see how it behaves.
-    strategy=SingleConfigStrategy,  # Single branch execution (default)
-    # strategy=ShadowStrategy,      # Single branch execution (all other configs run in the background)
-    # strategy=MultiBranchStrategy, # Multi-branch execution (all configs run in parallel and returned to caller)
-    # strategy=RoundRobinStrategy,  # Single branch execution (configs selected in round-robin fashion)
+    # branch_strategy=SingleConfigStrategy,  # Single branch execution (default)
+    branch_strategy=ShadowBranchStrategy,  # Single branch execution (all other configs run in the background)
+    # branch_strategy=MultiBranchStrategy, # Multi-branch execution (all configs run in parallel and returned to caller)
+    # branch_strategy=RoundRobinBranchStrategy,  # Single branch execution (configs selected in round-robin fashion)
     #
     #
     # Uncomment one or more of these configurations to
     # see how Spearmint handles the different types.
     configs=[
-        {"id": 1},  # Simple python dict config
-        # my_dynamic_list_config, # dict with expandable dynamic value: list
+        # {"id": 1},  # Simple python dict config
+        my_dynamic_list_config,  # dict with expandable dynamic value: list
         # my_dynamic_range_config, # dict with expandable dynamic value: range
         # my_dynamic_generator_config, # dict with expandable dynamic value: generator
         # "config/config0.yaml", # YAML config file path string
@@ -54,70 +64,100 @@ def step5(item: str) -> str:
     return f"final result for {item}"
 
 
-# Decorator binds custom MyConfig model to the config parameter
-@mint.experiment(bindings={MyConfig: ""})
-def step3_default(a: str, b: str, config: MyConfig) -> str | BranchContainer:
-    return f"{config.id}-{a} {config.id}-{b}"
+def step3point5() -> str:
+    score = my_nested_fn(42)
+    if score > 100:
+        return f"**3.500**"
+    else:
+        return f"==3.5=="
+
+
+async def async_step3point5() -> str:
+    await asyncio.sleep(0.1)
+    score = my_nested_fn(42)
+    if score > 100:
+        return f"**3.500**"
+    else:
+        return f"==3.5=="
+
+
+@mint.experiment()
+def step3(a: str, b: str, config: DefaultMintConfig) -> str:
+    c = step3point5()
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
 
 
 # Decorator binds default Config model to the config parameter
 @mint.experiment()
-async def async_step3(a: str, b: str, config: DefaultMintConfig) -> str | BranchContainer:
+async def async_step3(a: str, b: str, config: DefaultMintConfig) -> str:
     await asyncio.sleep(0.1)
+    c = await async_step3point5()
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
+
+
+# Decorator binds custom MyConfig model to the config parameter
+@mint.experiment(bindings={MyConfig: ""})
+def step3_default(a: str, b: str, config: MyConfig) -> str:
+    c = step3point5()
+    return f"{config.id}-{a} {config.id}-{b} {c}"
+
+
+@mint.experiment(branch_strategy=SingleConfigStrategy)
+def step3_single(a: str, b: str, config: DefaultMintConfig) -> str:
+    c = step3point5()
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
+
+
+@mint.experiment(branch_strategy=ShadowBranchStrategy)
+def step3_shadow(a: str, b: str, config: DefaultMintConfig) -> str:
+    c = step3point5()
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
+
+
+@mint.experiment(branch_strategy=RoundRobinBranchStrategy)
+def step3_round_robin(a: str, b: str, config: DefaultMintConfig) -> str:
+    c = step3point5()
+    return f"{config['id']}-{a} {config['id']}-{b} {c}"
+
+
+@mint.experiment(branch_strategy=MultiBranchStrategy)
+def step3_multi(a: str, b: str, config: DefaultMintConfig) -> str:
     return f"{config['id']}-{a} {config['id']}-{b}"
 
 
-@mint.experiment(strategy=SingleConfigStrategy)
-def step3_single(a: str, b: str, config: DefaultMintConfig) -> str | BranchContainer:
-    return f"{config['id']}-{a} {config['id']}-{b}"
-
-
-@mint.experiment(strategy=ShadowStrategy)
-def step3_shadow(a: str, b: str, config: DefaultMintConfig) -> str | BranchContainer:
-    return f"{config['id']}-{a} {config['id']}-{b}"
-
-
-@mint.experiment(strategy=RoundRobinStrategy)
-def step3_round_robin(a: str, b: str, config: DefaultMintConfig) -> str | BranchContainer:
-    return f"{config['id']}-{a} {config['id']}-{b}"
-
-
-@mint.experiment(strategy=MultiBranchStrategy)
-def step3_multi(a: str, b: str, config: DefaultMintConfig) -> str | BranchContainer:
-    return f"{config['id']}-{a} {config['id']}-{b}"
-
-
-def main(step1_input: str, step2_input: str, example: str) -> None:
-    step3_map = {
+def main(step1_input: str, step2_input: str, example: str) -> Any:
+    step3_map: dict[str, Callable[[str, str], Any]] = {
         "default": step3_default,
         "single": step3_single,
         "shadow": step3_shadow,
         "roundrobin": step3_round_robin,
-        "async": step3_default,  # Set to default, but run in async mode
+        # lambda to allow calling async function in sync context
+        "async": lambda a, b: asyncio.run(async_step3(a, b)),
     }
     if example in step3_map:
-        print(f"Running single branch with {example.capitalize()} Strategy:")
+        print("############################################")
+        print(f"# Running single branch with {example.capitalize()} Strategy")
+        print(f"# step1_input: {step1_input}, step2_input: {step2_input}")
         print("############################################")
         a = step1(step1_input)
         b = step2(step2_input)
-        if example == "async":
-            c = asyncio.run(async_step3(a, b))
-        else:
-            c = step3_map[example](a, b)
+        c = step3_map[example](a, b)
         d = step4(str(c))
 
         results = []
         for item in d:
             results.append(step5(item))
 
-        print(results, end="\n\n")
+        return results
 
     if example == "multi":
-        print("Running multi-branch with MultiBranch Strategy:")
+        print("############################################")
+        print("# Running multi-branch with MultiBranch Strategy")
+        print(f"# step1_input: {step1_input}, step2_input: {step2_input}")
         print("############################################")
         a = step1(step1_input)
         b = step2(step2_input)
-        branch_container: BranchContainer = step3_multi(a, b)
+        branch_container = step3_multi(a, b)
 
         branches = {}
         for branch in branch_container:
@@ -127,9 +167,34 @@ def main(step1_input: str, step2_input: str, example: str) -> None:
                 results.append(step5(item))
             branches[branch.config_id] = results
 
-        pprint(branches, indent=2)
-        print()
+        return branches
 
+
+async def example_experiment(data: list[dict]) -> None:
+    """Example function to illustrate usage of mint.experiment decorator."""
+    for record in data:
+        # root = current_scope.get()
+        # scope = BranchScope(branch=None, parent=root)
+        # token = current_scope.set(scope)
+        try:
+            print("------------------------------------------------")
+            async with mint.run(main) as runner:
+                result = await runner(
+                    step1_input=record["step1_input"],
+                    step2_input=record["step2_input"],
+                    example=record["example"],
+                )
+            pprint(result, indent=2)
+
+
+            scope = current_scope.get()
+            print(f"[{scope.__class__.__name__}]")
+            for child in root.children:
+                print(f"**{child.data}")
+                for grandchild in child.children:
+                    print(f"****{grandchild.data}")
+        finally:
+            current_scope.reset(token)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -141,6 +206,24 @@ if __name__ == "__main__":
         default="default",
         choices=["single", "shadow", "roundrobin", "multi", "default", "async"],
     )
+    parser.add_argument("--dataset", "-d", default=Path("samples/offline_experiment/data/step_input.jsonl"))
     args = parser.parse_args()
+    
+    data = []
+    if args.dataset:
+        with open(args.dataset, "r") as f:
+            for line in f:
+                data.append(json.loads(line))
+    else:
+        data = [{
+            "step1_input": args.step1_input,
+            "step2_input": args.step2_input,
+            "example": args.example,
+        }]
 
-    main(args.step1_input, args.step2_input, example=args.example)
+
+    print("============================================")
+    print("# Running experiment runner with dataset input")
+    print("============================================")
+
+    asyncio.run(example_experiment(data))

@@ -6,3 +6,6 @@ When writing code, use the following guidelines:
 - Use `uv` to manage dependencies and run the application.
 - Use `pytest` for testing.
 - Use `black` for code formatting.
+
+
+ALWAYS run the project using `uv run <command>` to ensure the correct environment is used.

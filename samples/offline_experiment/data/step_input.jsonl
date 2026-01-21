@@ -1,4 +1,4 @@
-{ "step1_input": "bill", "step2_input": "me", "expected_output": "0-bill 0-me" }
-{ "step1_input": "alice", "step2_input": "bob", "expected_output": "0-alice 0-bob" }
-{ "step1_input": "charlie", "step2_input": "dave", "expected_output": "0-charlie 0-dave" }
-{ "step1_input": "eve", "step2_input": "frank", "expected_output": "0-eve 0-frank" }
+{ "step1_input": "bill", "step2_input": "me", "example": "default", "expected_output": "0-bill 0-me" }
+{ "step1_input": "alice", "step2_input": "bob", "example": "default", "expected_output": "0-alice 0-bob" }
+{ "step1_input": "charlie", "step2_input": "dave", "example": "default", "expected_output": "0-charlie 0-dave" }
+{ "step1_input": "eve", "step2_input": "frank", "example": "default", "expected_output": "0-eve 0-frank" }

@@ -25,6 +25,8 @@ dependencies = [
     "pyyaml>=6.0.2",
     "pydantic>=2.0.0,<3.0.0",
     "mlflow>=3.5.1",
+    "opentelemetry-api>=1.38.0",
+    "opentelemetry-sdk>=1.38.0",
 ]
 
 [project.urls]
@@ -46,6 +48,8 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]
+
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/spearmint"]

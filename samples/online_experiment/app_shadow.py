@@ -2,9 +2,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from spearmint import Spearmint
-from spearmint.strategies import (
-    RoundRobinStrategy,  # noqa: F401
-)
+from spearmint.config.dynamic_value import DynamicValue
+from spearmint.strategies import ShadowStrategy
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -13,7 +12,22 @@ app = FastAPI(
     version="1.0.0",
 )
 
-mint: Spearmint = Spearmint(configs=["samples/online_experiment/config.yaml"])
+mint: Spearmint = Spearmint(
+    # This will run all configurations in the background
+    strategy=ShadowStrategy,
+    # This will expand to create 9 unique combinations of model and temperature configs
+    configs=[
+        {
+            "llm": {
+                "model_config": {
+                    "model": DynamicValue(["gpt-4o", "gpt-4o-mini", "gpt-5"]),
+                    "prompt": "Summarize the following text in no more than {max_length} words:\n\n{text}",
+                    "temperature": DynamicValue([0.0, 0.25, 0.5]),
+                }
+            }
+        }
+    ],
+)
 
 
 # Request model

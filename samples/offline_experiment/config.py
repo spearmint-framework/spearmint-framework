@@ -2,7 +2,7 @@ from collections.abc import Generator
 
 from pydantic import BaseModel
 
-from spearmint.config.dynamic_value import DynamicValue
+from spearmint.core import DynamicValue
 
 
 class MyConfig(BaseModel):
