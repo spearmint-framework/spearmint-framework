@@ -60,7 +60,6 @@ class Spearmint:
 
                 try:
                     loop = asyncio.get_running_loop()
-                    _ = loop
                     import concurrent.futures
 
                     def run_in_new_loop() -> Any:
