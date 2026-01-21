@@ -18,7 +18,6 @@ from .experiment_function import ExperimentFunction
 from .registry import experiment_fn_registry
 from .runner import run_experiment
 from .utils.handlers import yaml_handler
-from .runner import run_experiment
 
 class Spearmint:
     """Main Spearmint class for managing experiments and strategies."""
