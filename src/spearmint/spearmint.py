@@ -88,10 +88,10 @@ def experiment(
     configs: Sequence[dict[str, Any] | Config | str | Path],
     branch_strategy: Callable[..., tuple[Config, list[Config]]] | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Decorator for wrapping functions with experiment execution strategy."""
+    """Decorator for wrapping functions with experiment execution strategy."""
 
-        spearmint_instance = Spearmint(
-            configs=list(configs),
-            branch_strategy=branch_strategy,
-        )
-        return spearmint_instance.experiment()
+    spearmint_instance = Spearmint(
+        configs=list(configs),
+        branch_strategy=branch_strategy,
+    )
+    return spearmint_instance.experiment()
