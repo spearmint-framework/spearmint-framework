@@ -1,11 +1,12 @@
 import asyncio
-from typing import Annotated, Any
+from typing import Annotated
 
 import pytest
 
 from spearmint import Spearmint, Config, experiment
 from spearmint.configuration import Bind
-from spearmint.spearmint import current_experiment_case, experiment_fn_registry
+from spearmint.context import current_experiment_case
+from spearmint.registry import experiment_fn_registry
 
 
 class TestSpearmint:
