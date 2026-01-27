@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import inspect
 import threading
 from collections.abc import Coroutine
 from concurrent.futures import ThreadPoolExecutor
@@ -101,7 +102,7 @@ class ExperimentRunner:
 
         def execute(*args: Any, **kwargs: Any) -> ExperimentCaseResults:
             result = exp(experiment_case, *args, **kwargs)
-            if asyncio.iscoroutine(result):
+            if inspect.isawaitable(result):
                 result_value = _run_coroutine_sync(result)
             else:
                 result_value = result
@@ -120,7 +121,7 @@ class ExperimentRunner:
 
         async def execute(*args: Any, **kwargs: Any) -> ExperimentCaseResults:
             result = exp(experiment_case, *args, **kwargs)
-            if asyncio.iscoroutine(result):
+            if inspect.isawaitable(result):
                 result_value = await result
             else:
                 result_value = result
