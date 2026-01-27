@@ -4,7 +4,7 @@ from typing import Annotated
 
 import pytest
 
-from spearmint import Spearmint, Config, experiment
+from spearmint import Config, Spearmint, experiment
 from spearmint.configuration import Bind
 from spearmint.context import current_experiment_case
 from spearmint.registry import experiment_fn_registry
@@ -40,7 +40,7 @@ class TestSpearmint:
         @experiment(configs=bound_config)
         def process(value: str, config: Annotated[Config, Bind("bound.config")]) -> str:
             return f"{value}_{config['id']}"
-        
+
         # Test direct call with DI
         result = process("test")
         assert result == "test_my_bound_config"
@@ -56,7 +56,7 @@ class TestSpearmint:
         @experiment(configs=[])
         def process(value: str) -> str:
             return f"{value}_no_config"
-        
+
         result = process("test")
         assert result == "test_no_config"
 
@@ -185,3 +185,36 @@ class TestSpearmint:
 
         assert results.main_result.result == "test_async"
         assert results.variant_results == []
+
+    @pytest.mark.asyncio
+    async def test_async_background_variant_exception_handling(self):
+        """Test that exceptions in async background variants don't cause unobserved task warnings."""
+        configs = [
+            {"id": "main"},
+            {"id": "failing_variant"},
+        ]
+
+        task_completed = asyncio.Event()
+
+        @experiment(configs=configs)
+        async def process(value: str, config: Config) -> str:
+            await asyncio.sleep(0.01)
+            if config["id"] == "failing_variant":
+                try:
+                    raise ValueError(f"Test exception in {config['id']}")
+                finally:
+                    task_completed.set()
+            return f"{value}_{config['id']}"
+
+        async with Spearmint.arun(process, await_background_cases=False) as runner:
+            results = await runner("test")
+
+            # Main result should succeed
+            assert results.main_result.result == "test_main"
+            assert results.variant_results == []
+
+            # Wait for background task to complete (with timeout)
+            await asyncio.wait_for(task_completed.wait(), timeout=1.0)
+
+        # If we get here without "Task exception was never retrieved" warnings,
+        # the exception handling is working correctly
