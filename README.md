@@ -64,20 +64,32 @@ print(result)  # "Using gpt-4 at temp 0.7: Hello world"
 ### Running Experiments Explicitly
 
 ```python
+import asyncio
 from spearmint import Spearmint, Config
 
-with Spearmint.run(generate_text) as runner:
-    results = runner("Hello world")
-    print(results.main_result.result)
+# Initialize with a configuration
+mint = Spearmint(configs=[{"model": "gpt-4", "temperature": 0.7}])
+
+@mint.experiment()
+def generate_text(prompt: str, config: Config) -> str:
+    return f"Using {config['model']} at temp {config['temperature']}: {prompt}"
 
 @mint.experiment()
 async def generate_text_async(prompt: str, config: Config) -> str:
     return f"Async {config['model']}: {prompt}"
 
+# Sync runner
+with Spearmint.run(generate_text) as runner:
+    results = runner("Hello world")
+    print(results.main_result.result)
+
+# Async runner
 async def run_async() -> None:
     async with Spearmint.arun(generate_text_async) as runner:
         results = await runner("Hello async")
         print(results.main_result.result)
+
+asyncio.run(run_async())
 ```
 
 ### Comparing Multiple Configurations
