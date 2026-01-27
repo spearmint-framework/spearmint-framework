@@ -54,14 +54,14 @@ class ExperimentFunction:
         self.assigned_configs = self.bind_configs()
         self.inner_calls: dict[str, ExperimentFunction | None] = self._inner_calls()
 
-    async def __call__(self, experiment_case: ExperimentCase, *args: Any, **kwargs: Any) -> Any:
+    def __call__(self, experiment_case: ExperimentCase, *args: Any, **kwargs: Any) -> Any:
         config_id = experiment_case.get_config_id(self.name)
         assigned_configs = self.assigned_configs.get(config_id, [])
         injected_args, injected_kwargs = self.inject_config(
             self.func, assigned_configs, *args, **kwargs
         )
 
-        return await self.func(*injected_args, **injected_kwargs)
+        return self.func(*injected_args, **injected_kwargs)
 
     def get_registered_configs(self) -> tuple[Config, list[Config]]:
         return self.config_handler(self.registered_configs)

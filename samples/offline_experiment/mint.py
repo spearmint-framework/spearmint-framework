@@ -178,8 +178,8 @@ async def example_experiment(data: list[dict]) -> None:
         # token = current_scope.set(scope)
         try:
             print("------------------------------------------------")
-            async with mint.run(main) as runner:
-                result = await runner(
+            with mint.run(main) as runner:
+                result = runner(
                     step1_input=record["step1_input"],
                     step2_input=record["step2_input"],
                     example=record["example"],
