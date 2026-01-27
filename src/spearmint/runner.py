@@ -5,16 +5,19 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import inspect
+import logging
 import threading
-from collections.abc import Awaitable, Coroutine
+from collections.abc import AsyncIterator, Awaitable, Coroutine, Callable, Coroutine, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Callable, Iterator
+from typing import Any
 
 from .context import current_experiment_case, experiment_runner, set_experiment_case
 from .experiment_function import ExperimentCase, ExperimentFunction
 from .registry import experiment_fn_registry
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,6 +51,19 @@ class ExperimentRunner:
     def __init__(self, entry_point_fn: ExperimentFunction, await_background_cases: bool = True) -> None:
         self.entry_point_fn: ExperimentFunction = entry_point_fn
         self.await_background_cases: bool = await_background_cases
+
+    def _handle_background_task_exception(self, task: asyncio.Task[Any]) -> None:
+        """Handle exceptions from background variant tasks."""
+        try:
+            task.result()
+        except asyncio.CancelledError:
+            # Task was cancelled, which is a normal control flow mechanism
+            pass
+        except Exception:
+            logger.exception(
+                "Exception in background variant task for experiment '%s'",
+                self.entry_point_fn.func.__name__,
+            )
 
     def start(self, *args: Any, **kwargs: Any) -> ExperimentCaseResults:
         main_case, variant_cases = self.entry_point_fn.get_experiment_cases()
@@ -94,6 +110,10 @@ class ExperimentRunner:
             ]
             if self.await_background_cases:
                 variant_results = await asyncio.gather(*tasks)
+            else:
+                # Add done callbacks to handle exceptions in background tasks
+                for task in tasks:
+                    task.add_done_callback(self._handle_background_task_exception)
 
         return ExperimentCaseResults(main_result=main.main_result, variant_results=variant_results)
 
