@@ -7,7 +7,7 @@ import contextvars
 import inspect
 import logging
 import threading
-from collections.abc import AsyncIterator, Awaitable, Coroutine, Callable, Coroutine, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
