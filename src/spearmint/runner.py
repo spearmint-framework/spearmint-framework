@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import inspect
 import logging
 import threading
-from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
@@ -31,15 +32,18 @@ class ExperimentCaseResults:
     variant_results: list[FunctionResult]
 
 
-def _run_coroutine_sync(coro: Coroutine[Any, Any, Any]) -> Any:
+def _run_coroutine_sync(coro: Awaitable[Any]) -> Any:
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(coro)
+        # When there's no running loop, we can safely use asyncio.run
+        # Note: asyncio.run expects a Coroutine, but in practice exp() will
+        # return a coroutine when the function is async def.
+        return asyncio.run(coro)  # type: ignore[arg-type]
 
     ctx = contextvars.copy_context()
     with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(ctx.run, asyncio.run, coro)
+        future: Any = executor.submit(ctx.run, asyncio.run, coro)  # type: ignore[arg-type]
         return future.result()
 
 
@@ -121,7 +125,7 @@ class ExperimentRunner:
 
         def execute(*args: Any, **kwargs: Any) -> ExperimentCaseResults:
             result = exp(experiment_case, *args, **kwargs)
-            if asyncio.iscoroutine(result):
+            if inspect.isawaitable(result):
                 result_value = _run_coroutine_sync(result)
             else:
                 result_value = result
@@ -140,7 +144,7 @@ class ExperimentRunner:
 
         async def execute(*args: Any, **kwargs: Any) -> ExperimentCaseResults:
             result = exp(experiment_case, *args, **kwargs)
-            if asyncio.iscoroutine(result):
+            if inspect.isawaitable(result):
                 result_value = await result
             else:
                 result_value = result
