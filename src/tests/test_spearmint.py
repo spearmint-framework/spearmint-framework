@@ -1,10 +1,11 @@
 import asyncio
+import logging
 import threading
 from typing import Annotated
 
 import pytest
 
-from spearmint import Spearmint, Config, experiment
+from spearmint import Config, Spearmint, experiment
 from spearmint.configuration import Bind
 from spearmint.context import current_experiment_case
 from spearmint.registry import experiment_fn_registry
@@ -40,7 +41,7 @@ class TestSpearmint:
         @experiment(configs=bound_config)
         def process(value: str, config: Annotated[Config, Bind("bound.config")]) -> str:
             return f"{value}_{config['id']}"
-        
+
         # Test direct call with DI
         result = process("test")
         assert result == "test_my_bound_config"
@@ -56,7 +57,7 @@ class TestSpearmint:
         @experiment(configs=[])
         def process(value: str) -> str:
             return f"{value}_no_config"
-        
+
         result = process("test")
         assert result == "test_no_config"
 
@@ -185,3 +186,40 @@ class TestSpearmint:
 
         assert results.main_result.result == "test_async"
         assert results.variant_results == []
+
+    @pytest.mark.asyncio
+    async def test_async_background_variant_exception_handling(self, caplog):
+        """Test that exceptions in async background variants are logged properly."""
+        configs = [
+            {"id": "main"},
+            {"id": "failing_variant"},
+        ]
+
+        @experiment(configs=configs)
+        async def process(value: str, config: Config) -> str:
+            await asyncio.sleep(0.01)
+            if config["id"] == "failing_variant":
+                raise ValueError(f"Test exception in {config['id']}")
+            return f"{value}_{config['id']}"
+
+        with caplog.at_level(logging.ERROR):
+            async with Spearmint.arun(process, await_background_cases=False) as runner:
+                results = await runner("test")
+
+            # Main result should succeed
+            assert results.main_result.result == "test_main"
+            assert results.variant_results == []
+
+            # Wait a bit for background task to complete
+            await asyncio.sleep(0.1)
+
+        # Check that the exception was logged
+        assert any(
+            "Exception in background variant task" in record.message
+            for record in caplog.records
+        )
+        # Check the exception is in the log output (traceback is in exc_text or exc_info)
+        assert any(
+            "ValueError" in str(record.exc_info) if record.exc_info else False
+            for record in caplog.records
+        )
