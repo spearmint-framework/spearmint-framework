@@ -52,6 +52,9 @@ class ExperimentRunner:
         """Handle exceptions from background variant tasks."""
         try:
             task.result()
+        except asyncio.CancelledError:
+            # Task was cancelled, which is a normal control flow mechanism
+            pass
         except Exception:
             logger.exception(
                 "Exception in background variant task for experiment '%s'",
