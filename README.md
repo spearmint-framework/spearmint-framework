@@ -46,7 +46,6 @@ pip install spearmint-framework
 
 ```python
 from spearmint import Spearmint, Config
-from spearmint.config import Config
 
 # Initialize with a configuration
 mint = Spearmint(configs=[{"model": "gpt-4", "temperature": 0.7}])
