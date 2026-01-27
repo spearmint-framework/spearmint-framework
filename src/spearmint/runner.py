@@ -47,7 +47,6 @@ class ExperimentRunner:
     def __init__(self, entry_point_fn: ExperimentFunction, await_background_cases: bool = True) -> None:
         self.entry_point_fn: ExperimentFunction = entry_point_fn
         self.await_background_cases: bool = await_background_cases
-        self._background_tasks: list[asyncio.Task[Any]] = []
 
     def _handle_background_task_exception(self, task: asyncio.Task[Any]) -> None:
         """Handle exceptions from background variant tasks."""
@@ -108,7 +107,6 @@ class ExperimentRunner:
                 # Add done callbacks to handle exceptions in background tasks
                 for task in tasks:
                     task.add_done_callback(self._handle_background_task_exception)
-                    self._background_tasks.append(task)
 
         return ExperimentCaseResults(main_result=main.main_result, variant_results=variant_results)
 

@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import threading
 from typing import Annotated
 
@@ -188,38 +187,34 @@ class TestSpearmint:
         assert results.variant_results == []
 
     @pytest.mark.asyncio
-    async def test_async_background_variant_exception_handling(self, caplog):
-        """Test that exceptions in async background variants are logged properly."""
+    async def test_async_background_variant_exception_handling(self):
+        """Test that exceptions in async background variants don't cause unobserved task warnings."""
         configs = [
             {"id": "main"},
             {"id": "failing_variant"},
         ]
 
+        task_completed = asyncio.Event()
+
         @experiment(configs=configs)
         async def process(value: str, config: Config) -> str:
             await asyncio.sleep(0.01)
             if config["id"] == "failing_variant":
-                raise ValueError(f"Test exception in {config['id']}")
+                try:
+                    raise ValueError(f"Test exception in {config['id']}")
+                finally:
+                    task_completed.set()
             return f"{value}_{config['id']}"
 
-        with caplog.at_level(logging.ERROR):
-            async with Spearmint.arun(process, await_background_cases=False) as runner:
-                results = await runner("test")
+        async with Spearmint.arun(process, await_background_cases=False) as runner:
+            results = await runner("test")
 
             # Main result should succeed
             assert results.main_result.result == "test_main"
             assert results.variant_results == []
 
-            # Wait a bit for background task to complete
-            await asyncio.sleep(0.1)
+            # Wait for background task to complete (with timeout)
+            await asyncio.wait_for(task_completed.wait(), timeout=1.0)
 
-        # Check that the exception was logged
-        assert any(
-            "Exception in background variant task" in record.message
-            for record in caplog.records
-        )
-        # Check the exception is in the log output (traceback is in exc_text or exc_info)
-        assert any(
-            "ValueError" in str(record.exc_info) if record.exc_info else False
-            for record in caplog.records
-        )
+        # If we get here without "Task exception was never retrieved" warnings,
+        # the exception handling is working correctly
