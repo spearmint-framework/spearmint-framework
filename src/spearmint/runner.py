@@ -89,7 +89,7 @@ class ExperimentRunner:
                     ctx = contextvars.copy_context()
                     thread = threading.Thread(
                         target=ctx.run,
-                        args=(self._run_variant_background, variant_case, *args),
+                        args=(self._run_variant_sync, variant_case, *args),
                         kwargs=kwargs,
                         daemon=True,
                     )
@@ -159,9 +159,6 @@ class ExperimentRunner:
         with set_experiment_case(variant_case):
             result = self.run_with_context(self.entry_point_fn)(*args, **kwargs)
             return result.main_result
-
-    def _run_variant_background(self, variant_case: ExperimentCase, *args: Any, **kwargs: Any) -> None:
-        self._run_variant_sync(variant_case, *args, **kwargs)
 
     async def _run_variant_async(
         self, variant_case: ExperimentCase, *args: Any, **kwargs: Any
