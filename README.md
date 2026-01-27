@@ -45,8 +45,7 @@ pip install spearmint-framework
 ### Basic Example
 
 ```python
-from spearmint import Spearmint
-from spearmint.config import Config
+from spearmint import Spearmint, Config
 
 # Initialize with a configuration
 mint = Spearmint(configs=[{"model": "gpt-4", "temperature": 0.7}])
@@ -60,6 +59,37 @@ def generate_text(prompt: str, config: Config) -> str:
 # Call normally - Spearmint handles the rest
 result = generate_text("Hello world")
 print(result)  # "Using gpt-4 at temp 0.7: Hello world"
+```
+
+### Running Experiments Explicitly
+
+```python
+import asyncio
+from spearmint import Spearmint, Config
+
+# Initialize with a configuration
+mint = Spearmint(configs=[{"model": "gpt-4", "temperature": 0.7}])
+
+@mint.experiment()
+def generate_text(prompt: str, config: Config) -> str:
+    return f"Using {config['model']} at temp {config['temperature']}: {prompt}"
+
+@mint.experiment()
+async def generate_text_async(prompt: str, config: Config) -> str:
+    return f"Async {config['model']}: {prompt}"
+
+# Sync runner
+with Spearmint.run(generate_text) as runner:
+    results = runner("Hello world")
+    print(results.main_result.result)
+
+# Async runner
+async def run_async() -> None:
+    async with Spearmint.arun(generate_text_async) as runner:
+        results = await runner("Hello async")
+        print(results.main_result.result)
+
+asyncio.run(run_async())
 ```
 
 ### Comparing Multiple Configurations
@@ -207,10 +237,8 @@ def process_item(input_text: str, config: Config) -> str:
     return f"{config['id']}-{input_text}"
 
 # Run on a dataset (JSONL file)
-results = mint.run(
-    func=process_item,
-    dataset="data/test_cases.jsonl"
-)
+with Spearmint.run(process_item) as runner:
+    results = runner("hello")
 # Each line in JSONL: {"input_text": "hello", "expected": "1-hello"}
 ```
 
@@ -233,10 +261,8 @@ def process(input_text: str, config: dict) -> str:
     return f"{config['id']}-{input_text}"
 
 # Evaluators run automatically after dataset processing
-results = mint.run(
-    func=process,
-    dataset="data/test_cases.jsonl"
-)
+with Spearmint.run(process) as runner:
+    results = runner("hello")
 ```
 
 ## Real-World Examples
@@ -304,10 +330,8 @@ def process_document(doc_id: str, content: str, config: Config) -> dict:
     }
 
 # Process a dataset
-results = mint.run(
-    func=process_document,
-    dataset="documents.jsonl"
-)
+with Spearmint.run(process_document) as runner:
+    results = runner("doc-id", "document content")
 ```
 
 ## Tracing and Logging

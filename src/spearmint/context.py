@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, AsyncIterator
+from typing import TYPE_CHECKING, Iterator
 
 from .experiment_function import ExperimentCase
 
@@ -21,8 +21,8 @@ experiment_runner: ContextVar["ExperimentRunner | None"] = ContextVar(
 )
 
 
-@asynccontextmanager
-async def set_experiment_case(experiment_case: ExperimentCase) -> AsyncIterator[None]:
+@contextmanager
+def set_experiment_case(experiment_case: ExperimentCase) -> Iterator[None]:
     token = current_experiment_case.set(experiment_case)
     try:
         yield

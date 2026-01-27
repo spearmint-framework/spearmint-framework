@@ -1,9 +1,10 @@
 import asyncio
+import threading
 from typing import Annotated
 
 import pytest
 
-from spearmint import Spearmint, Config, experiment
+from spearmint import Config, Spearmint, experiment
 from spearmint.configuration import Bind
 from spearmint.context import current_experiment_case
 from spearmint.registry import experiment_fn_registry
@@ -12,23 +13,20 @@ from spearmint.registry import experiment_fn_registry
 class TestSpearmint:
     """Test @configure decorator with a single configuration."""
 
-    @pytest.mark.asyncio
-    async def test_basic_experiment(self):
+    def test_basic_experiment(self):
         single_config = [{"id": "single"}]
 
         @experiment(configs=single_config)
-        async def process(value: str, config: Config) -> str:
-            await asyncio.sleep(0.01)
+        def process(value: str, config: Config) -> str:
             return f"{value}_{config['id']}"
 
-        async with Spearmint.run(process) as runner:
-            results = await runner("test")
+        with Spearmint.run(process) as runner:
+            results = runner("test")
 
         assert results.main_result.result == "test_single"
         assert results.variant_results == []
 
-    @pytest.mark.asyncio
-    async def test_experiment_default_binding(self):
+    def test_experiment_default_binding(self):
         bound_config = [
             {
                 "bound": {
@@ -40,39 +38,35 @@ class TestSpearmint:
         ]
 
         @experiment(configs=bound_config)
-        async def process(value: str, config: Annotated[Config, Bind("bound.config")]) -> str:
-            await asyncio.sleep(0.01)
+        def process(value: str, config: Annotated[Config, Bind("bound.config")]) -> str:
             return f"{value}_{config['id']}"
-        
+
         # Test direct call with DI
-        result = await process("test")
+        result = process("test")
         assert result == "test_my_bound_config"
 
         # Test via Spearmint.run
-        async with Spearmint.run(process) as runner:
-            results = await runner("test")
+        with Spearmint.run(process) as runner:
+            results = runner("test")
 
         assert results.main_result.result == "test_my_bound_config"
         assert results.variant_results == []
 
-    @pytest.mark.asyncio
-    async def test_experiment_no_configs(self):
+    def test_experiment_no_configs(self):
         @experiment(configs=[])
-        async def process(value: str) -> str:
-            await asyncio.sleep(0.01)
+        def process(value: str) -> str:
             return f"{value}_no_config"
-        
-        result = await process("test")
+
+        result = process("test")
         assert result == "test_no_config"
 
-        async with Spearmint.run(process) as runner:
-            results = await runner("test")
+        with Spearmint.run(process) as runner:
+            results = runner("test")
 
         assert results.main_result.result == "test_no_config"
         assert results.variant_results == []
 
-    @pytest.mark.asyncio
-    async def test_nested_experiments_multiple_configs(self):
+    def test_nested_experiments_multiple_configs(self):
         inner_configs = [
             {"id": "inner_a"},
             {"id": "inner_b"},
@@ -83,18 +77,16 @@ class TestSpearmint:
         ]
 
         @experiment(configs=inner_configs)
-        async def inner(value: str, config: Config) -> str:
-            await asyncio.sleep(0.01)
+        def inner(value: str, config: Config) -> str:
             return f"{value}_{config['id']}"
 
         @experiment(configs=outer_configs)
-        async def outer(value: str, config: Config) -> str:
-            await asyncio.sleep(0.01)
-            inner_result = await inner(value)
+        def outer(value: str, config: Config) -> str:
+            inner_result = inner(value)
             return f"{config['id']}|{inner_result}"
 
-        async with Spearmint.run(outer, await_background_cases=True) as runner:
-            results = await runner("test")
+        with Spearmint.run(outer, await_background_cases=True) as runner:
+            results = runner("test")
 
         assert results.main_result.result == "outer_a|test_inner_a"
         assert len(results.variant_results) == 3
@@ -106,32 +98,29 @@ class TestSpearmint:
             "outer_b|test_inner_b",
         }
 
-    @pytest.mark.asyncio
-    async def test_nested_experiment_outer_default_config(self):
+    def test_nested_experiment_outer_default_config(self):
         inner_configs = [
             {"id": "inner_x"},
             {"id": "inner_y"},
         ]
 
         @experiment(configs=inner_configs)
-        async def inner(value: str, config: Config) -> str:
-            await asyncio.sleep(0.01)
+        def inner(value: str, config: Config) -> str:
             return f"{value}_{config['id']}"
 
         @experiment(configs=[])
-        async def outer(value: str) -> str:
-            await asyncio.sleep(0.01)
+        def outer(value: str) -> str:
             if False:
-                await inner(value)
+                inner(value)
             experiment_case = current_experiment_case.get()
             assert experiment_case is not None
             outer_config_id = experiment_case.get_config_id(outer.__qualname__)
             inner_experiment = experiment_fn_registry.get_experiment(inner)
-            inner_result = await inner_experiment(experiment_case, value)
+            inner_result = inner_experiment(experiment_case, value)
             return f"{outer_config_id}|{inner_result}"
 
-        async with Spearmint.run(outer, await_background_cases=True) as runner:
-            results = await runner("test")
+        with Spearmint.run(outer, await_background_cases=True) as runner:
+            results = runner("test")
 
         assert results.main_result.result == "default|test_inner_x"
         assert len(results.variant_results) == 1
@@ -139,8 +128,7 @@ class TestSpearmint:
         variant_values = {r.result for r in results.variant_results}
         assert variant_values == {"default|test_inner_y"}
 
-    @pytest.mark.asyncio
-    async def test_variants_not_awaited(self):
+    def test_variants_not_awaited(self):
         configs = [
             {"id": "main"},
             {"id": "variant_a"},
@@ -148,21 +136,85 @@ class TestSpearmint:
         ]
 
         seen: list[str] = []
-        done = asyncio.Event()
+        done = threading.Event()
 
         @experiment(configs=configs)
-        async def process(value: str, config: Config) -> str:
-            await asyncio.sleep(0.01)
+        def process(value: str, config: Config) -> str:
             seen.append(config["id"])
             if len(seen) == len(configs):
                 done.set()
             return f"{value}_{config['id']}"
 
-        async with Spearmint.run(process, await_background_cases=False) as runner:
-            results = await runner("test")
+        with Spearmint.run(process, await_background_cases=False) as runner:
+            results = runner("test")
 
         assert results.main_result.result == "test_main"
         assert results.variant_results == []
 
-        await asyncio.wait_for(done.wait(), timeout=1.0)
+        assert done.wait(timeout=1.0)
         assert set(seen) == {"main", "variant_a", "variant_b"}
+
+    def test_async_experiment_from_sync(self):
+        configs = [{"id": "async"}]
+
+        @experiment(configs=configs)
+        async def process(value: str, config: Config) -> str:
+            await asyncio.sleep(0.01)
+            return f"{value}_{config['id']}"
+
+        with Spearmint.run(process) as runner:
+            results = runner("test")
+
+        assert results.main_result.result == "test_async"
+        assert results.variant_results == []
+
+    @pytest.mark.asyncio
+    async def test_async_experiment(self):
+        configs = [{"id": "async"}]
+
+        @experiment(configs=configs)
+        async def process(value: str, config: Config) -> str:
+            await asyncio.sleep(0.01)
+            return f"{value}_{config['id']}"
+
+        result = await process("test")
+        assert result == "test_async"
+
+        async with Spearmint.arun(process) as runner:
+            results = await runner("test")
+
+        assert results.main_result.result == "test_async"
+        assert results.variant_results == []
+
+    @pytest.mark.asyncio
+    async def test_async_background_variant_exception_handling(self):
+        """Test that exceptions in async background variants don't cause unobserved task warnings."""
+        configs = [
+            {"id": "main"},
+            {"id": "failing_variant"},
+        ]
+
+        task_completed = asyncio.Event()
+
+        @experiment(configs=configs)
+        async def process(value: str, config: Config) -> str:
+            await asyncio.sleep(0.01)
+            if config["id"] == "failing_variant":
+                try:
+                    raise ValueError(f"Test exception in {config['id']}")
+                finally:
+                    task_completed.set()
+            return f"{value}_{config['id']}"
+
+        async with Spearmint.arun(process, await_background_cases=False) as runner:
+            results = await runner("test")
+
+            # Main result should succeed
+            assert results.main_result.result == "test_main"
+            assert results.variant_results == []
+
+            # Wait for background task to complete (with timeout)
+            await asyncio.wait_for(task_completed.wait(), timeout=1.0)
+
+        # If we get here without "Task exception was never retrieved" warnings,
+        # the exception handling is working correctly

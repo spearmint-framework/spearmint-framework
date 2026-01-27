@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 from collections.abc import Callable, Sequence
 from functools import wraps
 from pathlib import Path
@@ -16,7 +16,7 @@ from typing import Any
 from .configuration import Config, parse_configs
 from .experiment_function import ExperimentFunction
 from .registry import experiment_fn_registry
-from .runner import run_experiment
+from .runner import run_experiment, run_experiment_async
 from .utils.handlers import yaml_handler
 
 class Spearmint:
@@ -44,42 +44,35 @@ class Spearmint:
             experiment_fn_registry.register_experiment(experiment)
 
             @wraps(func)
-            async def awrapper(*args: Any, **kwargs: Any) -> Any:
-                async with run_experiment(func) as runner:
-                    results = await runner(*args, **kwargs)
+            def swrapper(*args: Any, **kwargs: Any) -> Any:
+                with run_experiment(func) as runner:
+                    results = runner(*args, **kwargs)
                     return results.main_result.result
 
             @wraps(func)
-            def swrapper(*args: Any, **kwargs: Any) -> Any:
-                import contextvars
-
-                ctx = contextvars.copy_context()
-
-                async def run_with_context() -> Any:
-                    return await awrapper(*args, **kwargs)
-
-                try:
-                    loop = asyncio.get_running_loop()
-                    import concurrent.futures
-
-                    def run_in_new_loop() -> Any:
-                        return ctx.run(asyncio.run, run_with_context())
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(run_in_new_loop)
-                        return future.result()
-                except RuntimeError:
-                    return ctx.run(asyncio.run, run_with_context())
+            async def awrapper(*args: Any, **kwargs: Any) -> Any:
+                async with run_experiment_async(func) as runner:
+                    results = await runner(*args, **kwargs)
+                    return results.main_result.result
 
             return awrapper if inspect.iscoroutinefunction(func) else swrapper
 
         return decorator
     
     @staticmethod
+    @contextmanager
+    def run(func: Callable[..., Any], await_background_cases: bool = False):
+        """Run the given function as a sync experiment."""
+        with run_experiment(func, await_background_cases=await_background_cases) as runner:
+            yield runner
+
+    @staticmethod
     @asynccontextmanager
-    async def run(func: Callable[..., Any], await_background_cases: bool = False):
-        """Run the given function as an experiment."""
-        async with run_experiment(func, await_background_cases=await_background_cases) as runner:
+    async def arun(func: Callable[..., Any], await_background_cases: bool = False):
+        """Run the given function as an async experiment."""
+        async with run_experiment_async(
+            func, await_background_cases=await_background_cases
+        ) as runner:
             yield runner
 
 
