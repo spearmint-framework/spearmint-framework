@@ -4,11 +4,13 @@ from spearmint import Config, Spearmint
 
 # You can load configs from YAML files or directories of YAML files.
 
+BASE_DIR = Path(__file__).parent
+
 mint = Spearmint(
     configs=[
-        "samples/offline_experiment/config/config0.yaml",
-        "samples/offline_experiment/config/config1.yaml",
-        Path("samples/offline_experiment/config/config2.yaml"),
+        BASE_DIR / "config" / "config0.yaml",
+        BASE_DIR / "config" / "config1.yaml",
+        BASE_DIR / "config" / "config2.yaml",
     ]
 )
 

@@ -11,7 +11,7 @@ Spearmint helps you answer questions like:
 
 Instead of manually running your code with different parameters and tracking results, Spearmint automates this process using **strategies** and **configurations**.
 
-> If you learn better by seeing code in action, check out the [examples directory](samples/).
+> If you learn better by seeing code in action, check out the [cookbook](cookbook/) (the `samples/` directory is legacy/temporary and will be removed once online experiments migrate).
 
 ## Core Concepts
 

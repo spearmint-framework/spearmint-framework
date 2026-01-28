@@ -1,5 +1,7 @@
 # Spearmint Cookbook
 
+The `samples/` directory is legacy/temporary and will be removed once online experiments migrate.
+
 Small, focused recipes for common Spearmint workflows. Run any sample with:
 
 ```bash
