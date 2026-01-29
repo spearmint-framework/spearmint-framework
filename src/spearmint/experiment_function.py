@@ -188,7 +188,10 @@ class ExperimentFunction:
                     else:
                         raise ValueError(f"Key '{part}' not found in bind path '{bind_path}'")
 
-                bound_configs.append(model_cls.model_validate(config_data))
+                if isinstance(config_data, model_cls):
+                    bound_configs.append(config_data)
+                else:
+                    bound_configs.append(model_cls.model_validate(config_data))
 
         return bound_configs
 
