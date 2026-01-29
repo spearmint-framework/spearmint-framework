@@ -48,9 +48,9 @@ def _run_coroutine_sync(coro: Awaitable[Any]) -> Any:
 
 
 class ExperimentRunner:
-    def __init__(self, entry_point_fn: ExperimentFunction, await_background_cases: bool = True) -> None:
+    def __init__(self, entry_point_fn: ExperimentFunction, await_variants: bool) -> None:
         self.entry_point_fn: ExperimentFunction = entry_point_fn
-        self.await_background_cases: bool = await_background_cases
+        self.await_variants: bool = await_variants
 
     def _handle_background_task_exception(self, task: asyncio.Task[Any]) -> None:
         """Handle exceptions from background variant tasks."""
@@ -72,7 +72,7 @@ class ExperimentRunner:
 
         variant_results: list[FunctionResult] = []
         if variant_cases:
-            if self.await_background_cases:
+            if self.await_variants:
                 with ThreadPoolExecutor() as executor:
                     futures = []
                     for variant_case in variant_cases:
@@ -108,7 +108,7 @@ class ExperimentRunner:
                 asyncio.create_task(self._run_variant_async(variant_case, *args, **kwargs))
                 for variant_case in variant_cases
             ]
-            if self.await_background_cases:
+            if self.await_variants:
                 variant_results = await asyncio.gather(*tasks)
             else:
                 # Add done callbacks to handle exceptions in background tasks
@@ -170,7 +170,7 @@ class ExperimentRunner:
 
 @contextmanager
 def run_experiment(
-    func: Callable[..., Any], await_background_cases: bool = False
+    func: Callable[..., Any], await_variants: bool = False
 ) -> Iterator[Callable[..., ExperimentCaseResults]]:
     """Run the given function as a sync experiment."""
     experiment_fn = experiment_fn_registry.get_experiment(func)
@@ -178,7 +178,7 @@ def run_experiment(
     runner = experiment_runner.get()
     if not runner:
         runner = ExperimentRunner(
-            entry_point_fn=experiment_fn, await_background_cases=await_background_cases
+            entry_point_fn=experiment_fn, await_variants=await_variants
         )
         token = experiment_runner.set(runner)
         try:
@@ -191,7 +191,7 @@ def run_experiment(
 
 @asynccontextmanager
 async def run_experiment_async(
-    func: Callable[..., Any], await_background_cases: bool = False
+    func: Callable[..., Any], await_variants: bool = False
 ) -> AsyncIterator[Callable[..., Coroutine[Any, Any, ExperimentCaseResults]]]:
     """Run the given function as an async experiment."""
     experiment_fn = experiment_fn_registry.get_experiment(func)
@@ -199,7 +199,7 @@ async def run_experiment_async(
     runner = experiment_runner.get()
     if not runner:
         runner = ExperimentRunner(
-            entry_point_fn=experiment_fn, await_background_cases=await_background_cases
+            entry_point_fn=experiment_fn, await_variants=await_variants
         )
         token = experiment_runner.set(runner)
         try:

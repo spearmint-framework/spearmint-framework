@@ -1,8 +1,12 @@
 import asyncio
+import runpy
+import sys
 import threading
-from typing import Annotated
+from pathlib import Path
+from typing import Annotated, Iterable
 
 import pytest
+from pydantic import BaseModel
 
 from spearmint import Config, Spearmint, experiment
 from spearmint.configuration import Bind
@@ -66,6 +70,37 @@ class TestSpearmint:
         assert results.main_result.result == "test_no_config"
         assert results.variant_results == []
 
+    def test_typed_config_injection_pydantic_model(self):
+        class ModelConfig(BaseModel):
+            model_name: str
+            temperature: float
+            max_tokens: int = 100
+
+        configs = [
+            {"model_name": "gpt-4", "temperature": 0.5},
+            {"model_name": "gpt-3.5", "temperature": 0.9, "max_tokens": 50},
+        ]
+
+        @experiment(configs=configs)
+        def generate(prompt: str, model_config: ModelConfig) -> str:
+            return (
+                f"Prompt: {prompt}, Model: {model_config.model_name}, "
+                f"Temp: {model_config.temperature}, MaxTokens: {model_config.max_tokens}"
+            )
+
+        with Spearmint.run(generate, await_variants=True) as runner:
+            results = runner("Test prompt")
+
+        assert (
+            results.main_result.result
+            == "Prompt: Test prompt, Model: gpt-4, Temp: 0.5, MaxTokens: 100"
+        )
+        variant_values = {r.result for r in results.variant_results}
+        assert (
+            "Prompt: Test prompt, Model: gpt-3.5, Temp: 0.9, MaxTokens: 50"
+            in variant_values
+        )
+
     def test_nested_experiments_multiple_configs(self):
         inner_configs = [
             {"id": "inner_a"},
@@ -85,7 +120,7 @@ class TestSpearmint:
             inner_result = inner(value)
             return f"{config['id']}|{inner_result}"
 
-        with Spearmint.run(outer, await_background_cases=True) as runner:
+        with Spearmint.run(outer, await_variants=True) as runner:
             results = runner("test")
 
         assert results.main_result.result == "outer_a|test_inner_a"
@@ -119,7 +154,7 @@ class TestSpearmint:
             inner_result = inner_experiment(experiment_case, value)
             return f"{outer_config_id}|{inner_result}"
 
-        with Spearmint.run(outer, await_background_cases=True) as runner:
+        with Spearmint.run(outer, await_variants=True) as runner:
             results = runner("test")
 
         assert results.main_result.result == "default|test_inner_x"
@@ -145,7 +180,7 @@ class TestSpearmint:
                 done.set()
             return f"{value}_{config['id']}"
 
-        with Spearmint.run(process, await_background_cases=False) as runner:
+        with Spearmint.run(process, await_variants=False) as runner:
             results = runner("test")
 
         assert results.main_result.result == "test_main"
@@ -206,7 +241,7 @@ class TestSpearmint:
                     task_completed.set()
             return f"{value}_{config['id']}"
 
-        async with Spearmint.arun(process, await_background_cases=False) as runner:
+        async with Spearmint.arun(process, await_variants=False) as runner:
             results = await runner("test")
 
             # Main result should succeed
@@ -218,3 +253,34 @@ class TestSpearmint:
 
         # If we get here without "Task exception was never retrieved" warnings,
         # the exception handling is working correctly
+
+
+def _iter_cookbook_scripts() -> Iterable[Path]:
+    repo_root = Path(__file__).resolve().parents[2]
+    cookbook_root = repo_root / "cookbook"
+    excluded_dirs = {"online_experiments", "__pycache__"}
+
+    paths = []
+    for path in cookbook_root.rglob("*.py"):
+        if any(part in excluded_dirs for part in path.parts):
+            continue
+        paths.append(path)
+
+    return sorted(paths)
+
+
+@pytest.mark.parametrize(
+    "script_path",
+    _iter_cookbook_scripts(),
+    ids=lambda path: path.relative_to(Path(__file__).resolve().parents[2]).as_posix(),
+)
+def test_cookbook_samples(script_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    src_root = repo_root / "src"
+
+    monkeypatch.chdir(repo_root)
+
+    if str(src_root) not in sys.path:
+        sys.path.insert(0, str(src_root))
+
+    runpy.run_path(str(script_path), run_name="__main__")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import itertools
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -20,7 +20,7 @@ class Bind:
 
 
 def parse_configs(
-    configs: list[Any], config_handler: Callable[[str | Path], list[dict[str, Any]]]
+    configs: Sequence[Any], config_handler: Callable[[str | Path], list[dict[str, Any]]]
 ) -> list[Config]:
     """
     Manually set configurations.

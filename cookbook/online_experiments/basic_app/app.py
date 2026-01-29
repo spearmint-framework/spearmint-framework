@@ -1,10 +1,9 @@
 from fastapi import FastAPI, HTTPException
+from typing import Annotated
 from pydantic import BaseModel
 
 from spearmint import Spearmint
-from spearmint.strategies import (
-    RoundRobinStrategy,  # noqa: F401
-)
+from spearmint.configuration import Bind
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -13,17 +12,15 @@ app = FastAPI(
     version="1.0.0",
 )
 
-mint: Spearmint = Spearmint(configs=["samples/online_experiment/config.yaml"])
+# Initialize Spearmint with a single configuration
+mint: Spearmint = Spearmint(configs=["cookbook/online_experiments/basic_app/config.yaml"])
 
 
-# Request model
 class SummarizeRequest(BaseModel):
     text: str
-    max_length: int | None = 150
-    model: str | None = "gpt-3.5-turbo"
+    max_length: int = 150
 
 
-# Response model
 class SummarizeResponse(BaseModel):
     summary: str
     original_length: int
@@ -46,15 +43,9 @@ async def root() -> dict[str, str]:
 async def summarize_text() -> SummarizeResponse:
     """
     Generate a summary of the provided text using OpenAI
-
-    Args:
-        request: SummarizeRequest containing the text to summarize
-
-    Returns:
-        SummarizeResponse with the generated summary and metadata
     """
     request = SummarizeRequest(
-        text="OpenAI's mission is to ensure that artificial general intelligence benefits all of humanity. We are committed to building safe and beneficial AI systems, and to conducting research that advances the field of AI in a responsible manner.",
+        text="Example text to be summarized by the API. This would be replaced by user input in a real scenario.",
         max_length=150,
     )
     try:
@@ -70,12 +61,12 @@ async def summarize_text() -> SummarizeResponse:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") from e
 
-
-@mint.experiment(bindings={ModelConfig: "llm.model_config"})
+# Dependency inject ModelConfig by binding the values from llm.model_config in the YAML config
+@mint.experiment()
 def _generate_summary(
     text: str,
-    model_config: ModelConfig,
-    max_length: int | None = 150,
+    model_config: Annotated[ModelConfig, Bind("llm.model_config")],
+    max_length: int = 150,
 ) -> str:
     # Create the prompt for summarization
     prompt = model_config.prompt.format(max_length=max_length, text=text)

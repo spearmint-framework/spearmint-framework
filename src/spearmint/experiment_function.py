@@ -6,8 +6,9 @@ import inspect
 from itertools import product
 
 
-from matplotlib.text import Annotation
 from pydantic import BaseModel
+
+from spearmint.context import RuntimeContext, runtime_context
 
 from .configuration import Config, Bind
 
@@ -32,7 +33,7 @@ class ExperimentCase:
         return config_id
 
 
-def default_config_handler(configs: list[Config]) -> tuple[Config, list[Config]]:
+def default_config_handler(configs: list[Config], ctx: RuntimeContext) -> tuple[Config, list[Config]]:
     if not configs:
         configs = [Config(root={"config_id": "default"})]
     return configs[0], configs[1:]
@@ -43,7 +44,7 @@ class ExperimentFunction:
         self,
         func: Callable[..., Any],
         configs: list[Config] = [],
-        config_handler: Callable[..., tuple[Config, list[Config]]] | None = None,
+        config_handler: Callable[[list[Config], RuntimeContext], tuple[Config, list[Config]]] | None = None,
     ) -> None:
         self.func = func
         self.name = func.__qualname__
@@ -56,7 +57,7 @@ class ExperimentFunction:
 
     def __call__(self, experiment_case: ExperimentCase, *args: Any, **kwargs: Any) -> Any:
         config_id = experiment_case.get_config_id(self.name)
-        assigned_configs = self.assigned_configs.get(config_id, [])
+        assigned_configs = self.assigned_configs.get(config_id, {})
         injected_args, injected_kwargs = self.inject_config(
             self.func, assigned_configs, *args, **kwargs
         )
@@ -64,7 +65,8 @@ class ExperimentFunction:
         return self.func(*injected_args, **injected_kwargs)
 
     def get_registered_configs(self) -> tuple[Config, list[Config]]:
-        return self.config_handler(self.registered_configs)
+        with runtime_context() as ctx:
+            return self.config_handler(self.registered_configs, ctx)
 
     def update_inner_calls(self, experiment: "ExperimentFunction") -> None:
         # Update inner calls if the experiment function matches
@@ -145,29 +147,29 @@ class ExperimentFunction:
                 bindings = get_bindings(ann)
                 if bindings:
                     param_bindings[param_name] = bindings
-            if ann in (BaseModel, Config):
-                # Direct type annotation without Annotated
+
+            elif issubclass(ann, (BaseModel, Config)):
                 param_bindings[param_name] = {ann: ""}
 
         return param_bindings
             
-    def bind_configs(self) -> dict[str, list[BaseModel]]:
+    def bind_configs(self) -> dict[str, dict[str, BaseModel]]:
         """Bind configs to model classes based on provided bindings.
 
         This method can be used to map configuration model instances
         to function parameters based on type annotations or explicit
         bindings.
         """
-        bound_configs_by_id: dict[str, list[BaseModel]] = {}
+        bound_configs_by_id: dict[str, dict[str, BaseModel]] = {}
         for config in self.registered_configs:
             bound_configs_by_id[config["config_id"]] = self.bind_config(config)
 
         return bound_configs_by_id
     
-    def bind_config(self, config: Config) -> list[BaseModel]:
-        bound_configs = []
+    def bind_config(self, config: Config) -> dict[str, BaseModel]:
+        bound_configs = {}
 
-        for param_bind in self.param_bindings.values():
+        for param_name, param_bind in self.param_bindings.items():
             for model_cls, bind_path in param_bind.items(): 
                 # For RootModel, model_dump() returns the root dict
                 config_dict = config.model_dump() if hasattr(config, "model_dump") else config.root
@@ -181,17 +183,19 @@ class ExperimentFunction:
                     else:
                         raise ValueError(f"Key '{part}' not found in bind path '{bind_path}'")
 
-                bound_configs.append(model_cls.model_validate(config_data))
+                if isinstance(config_data, model_cls):
+                    bound_configs[param_name] = config_data
+                else:
+                    bound_configs[param_name] = model_cls.model_validate(config_data)
 
         return bound_configs
 
 
 
     def inject_config(self,
-        func: Callable[..., Any], configs: list[BaseModel], *args: Any, **kwargs: Any
+        func: Callable[..., Any], configs: dict[str, BaseModel], *args: Any, **kwargs: Any
     ) -> tuple[tuple[Any, ...], dict[str, Any]]:
         inspect_signature = inspect.signature(func)
-        remaining_configs = list(configs)
 
         # Track which parameters have been filled by positional arguments
         params_list = list(inspect_signature.parameters.values())
@@ -224,20 +228,14 @@ class ExperimentFunction:
                 continue
 
             # Inject config if annotation matches config model class
-            bound_config= self.param_bindings.get(param.name, {})
-
-            for subconfig in remaining_configs[:]:
-                # if any(
-                #     issubclass(param_cls, subconfig.__class__)
-                #     for param_cls in _resolve_class_types(param.annotation)
-                # ):
-                if subconfig.__class__ in bound_config:
-                    if param.kind in (param.POSITIONAL_ONLY,):
-                        args = args + (subconfig,)
-                    elif param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD):
-                        kwargs[param.name] = subconfig
-                    remaining_configs.remove(subconfig)
-                    break
+            bound_config = configs.get(param.name)
+            if not bound_config:
+                continue
+            
+            if param.kind in (param.POSITIONAL_ONLY,):
+                args = args + (bound_config,)
+            elif param.kind in (param.KEYWORD_ONLY, param.POSITIONAL_OR_KEYWORD):
+                kwargs[param.name] = bound_config
 
         return args, kwargs
 
