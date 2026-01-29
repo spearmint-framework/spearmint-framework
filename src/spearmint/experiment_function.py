@@ -6,8 +6,9 @@ import inspect
 from itertools import product
 
 
-from matplotlib.text import Annotation
 from pydantic import BaseModel
+
+from spearmint.context import RuntimeContext, runtime_context
 
 from .configuration import Config, Bind
 
@@ -32,7 +33,7 @@ class ExperimentCase:
         return config_id
 
 
-def default_config_handler(configs: list[Config]) -> tuple[Config, list[Config]]:
+def default_config_handler(configs: list[Config], ctx: RuntimeContext) -> tuple[Config, list[Config]]:
     if not configs:
         configs = [Config(root={"config_id": "default"})]
     return configs[0], configs[1:]
@@ -43,7 +44,7 @@ class ExperimentFunction:
         self,
         func: Callable[..., Any],
         configs: list[Config] = [],
-        config_handler: Callable[..., tuple[Config, list[Config]]] | None = None,
+        config_handler: Callable[[list[Config], RuntimeContext], tuple[Config, list[Config]]] | None = None,
     ) -> None:
         self.func = func
         self.name = func.__qualname__
@@ -64,7 +65,8 @@ class ExperimentFunction:
         return self.func(*injected_args, **injected_kwargs)
 
     def get_registered_configs(self) -> tuple[Config, list[Config]]:
-        return self.config_handler(self.registered_configs)
+        with runtime_context() as ctx:
+            return self.config_handler(self.registered_configs, ctx)
 
     def update_inner_calls(self, experiment: "ExperimentFunction") -> None:
         # Update inner calls if the experiment function matches
@@ -145,8 +147,13 @@ class ExperimentFunction:
                 bindings = get_bindings(ann)
                 if bindings:
                     param_bindings[param_name] = bindings
-            if ann in (BaseModel, Config):
-                # Direct type annotation without Annotated
+
+            # Direct type annotation without Annotated
+            # - `Config` is a RootModel (and a BaseModel subclass) used for raw access.
+            # - Any pydantic `BaseModel` subclass should be constructible from the config dict.
+            if ann is Config:
+                param_bindings[param_name] = {Config: ""}
+            elif inspect.isclass(ann) and issubclass(ann, BaseModel) and ann is not BaseModel:
                 param_bindings[param_name] = {ann: ""}
 
         return param_bindings

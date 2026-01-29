@@ -1,0 +1,4 @@
+{ "base_str": "bill", "expected_output": "bill_0" }
+{ "base_str": "alice", "expected_output": "alice_0" }
+{ "base_str": "charlie", "expected_output": "charlie_0" }
+{ "base_str": "eve", "expected_output": "eve_0" }

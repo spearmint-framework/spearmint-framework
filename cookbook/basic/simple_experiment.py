@@ -14,3 +14,4 @@ if __name__ == "__main__":
     with Spearmint.run(generate_text) as runner:
         result = runner("Hello, World!")
         print(f"Result: {result.main_result.result}")
+        assert result.main_result.result == "Processed 'Hello, World!' using gpt-4 (temp=0.7)"

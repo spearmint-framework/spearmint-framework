@@ -19,13 +19,15 @@ mint = Spearmint(
     ]
 )
 
-# Bind the Pydantic model to the config parameter using Bind + Annotated
+# Dependency inject ModelConfig using the configs defined above
 @mint.experiment()
-def generate(prompt: str, config: Annotated[Config, Bind("")]) -> str:
-    model_config = ModelConfig.model_validate(config.root)
-    return f"Model: {model_config.model_name}, Temp: {model_config.temperature}"
+def generate(prompt: str, model_config: ModelConfig) -> str:
+    return f"Prompt: {prompt}, Model: {model_config.model_name}, Temp: {model_config.temperature}, MaxTokens: {model_config.max_tokens}"
 
 if __name__ == "__main__":
-    with Spearmint.run(generate) as runner:
+    with Spearmint.run(generate, await_variants=True) as runner:
         result = runner("Test prompt")
         print(result.main_result.result)
+        assert result.main_result.result == "Prompt: Test prompt, Model: gpt-4, Temp: 0.5, MaxTokens: 100"
+        variant_results = [variant.result for variant in result.variant_results]
+        assert "Prompt: Test prompt, Model: gpt-3.5, Temp: 0.9, MaxTokens: 50" in variant_results

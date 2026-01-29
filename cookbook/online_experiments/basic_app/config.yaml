@@ -1,4 +1,4 @@
 llm:
   model_config:
-    model: "gpt-3.5-turbo"
+    model: "gpt-5.2-chat"
     prompt: "You are a helpful assistant that summarizes text."

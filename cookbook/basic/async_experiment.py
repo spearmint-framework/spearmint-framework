@@ -16,7 +16,8 @@ async def fetch_data(url: str, config: Config) -> str:
     return f"Data from {config['id']}"
 
 async def main():
-    async with Spearmint.arun(fetch_data, await_background_cases=True) as runner:
+    # TODO: rename await_variants to await_variants
+    async with Spearmint.arun(fetch_data, await_variants=True) as runner:
         results = await runner("http://example.com")
 
     print(f"Main result: {results.main_result.result}")
