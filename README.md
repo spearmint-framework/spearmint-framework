@@ -11,7 +11,15 @@ Spearmint helps you answer questions like:
 
 Instead of manually running your code with different parameters and tracking results, Spearmint automates this process using **strategies** and **configurations**.
 
-> If you learn better by seeing code in action, check out the [cookbook](cookbook/) (the `samples/` directory is legacy/temporary and will be removed once online experiments migrate).
+## Documentation
+
+- **[Getting Started Tutorial](docs/tutorials/getting-started.md)** - New to Spearmint? Start here
+- **[API Reference](docs/reference/api.md)** - Complete API documentation
+- **[Cookbook](cookbook/)** - Practical code examples
+- **[Architecture](docs/explanation/architecture.md)** - How Spearmint works internally
+- **[Full Documentation](docs/)** - Complete documentation index
+
+> If you learn better by seeing code in action, check out the [cookbook](cookbook/).
 
 ## Core Concepts
 
