@@ -1,0 +1,136 @@
+site_name: Spearmint Framework
+site_url: https://spearmint-framework.github.io/spearmint-framework/
+site_description: An experiment framework for testing multiple configurations of your code
+site_author: Bill DeRusha
+
+repo_name: spearmint-framework/spearmint-framework
+repo_url: https://github.com/spearmint-framework/spearmint-framework
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: green
+      accent: light green
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: green
+      accent: light green
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: index.md
+  - Tutorials:
+      - tutorials/index.md
+      - Getting Started: tutorials/getting-started.md
+      - Configuration Basics: tutorials/configuration-basics.md
+      - FastAPI Experiment: tutorials/fastapi-experiment.md
+  - How-To Guides:
+      - how-to/index.md
+      - Compare Configurations: how-to/compare-configurations.md
+      - Shadow Testing: how-to/shadow-testing.md
+      - Parameter Sweeps: how-to/parameter-sweeps.md
+      - Typed Configurations: how-to/typed-configurations.md
+      - Process Datasets: how-to/process-datasets.md
+      - Custom Evaluators: how-to/custom-evaluators.md
+      - Integrate FastAPI: how-to/integrate-fastapi.md
+      - Access MLflow: how-to/access-mlflow.md
+      - Configure OpenTelemetry: how-to/configure-otel.md
+      - Custom Strategies: how-to/custom-strategies.md
+      - Nested Experiments: how-to/nested-experiments.md
+      - Debug Experiments: how-to/debug-experiments.md
+  - Reference:
+      - reference/index.md
+      - API:
+          - Spearmint Class: reference/api/spearmint.md
+          - Experiment Decorator: reference/api/experiment.md
+          - Runner APIs: reference/api/runner.md
+          - Config Object: reference/api/config.md
+          - DynamicValue: reference/api/dynamic-value.md
+          - Config Parsing: reference/api/config-parsing.md
+          - Config Binding: reference/api/config-binding.md
+          - Results: reference/api/results.md
+          - FunctionResult: reference/api/function-result.md
+          - ExperimentCase: reference/api/experiment-case.md
+      - Branch Strategies: reference/strategies.md
+      - Context Management: reference/context.md
+      - Registry System: reference/registry.md
+      - Integrations:
+          - MLflow: reference/integrations/mlflow.md
+          - OpenTelemetry: reference/integrations/opentelemetry.md
+          - File Handlers: reference/integrations/handlers.md
+      - Configuration Schema: reference/configuration-schema.md
+      - Config IDs: reference/config-ids.md
+      - YAML Format: reference/yaml-format.md
+  - Explanation:
+      - explanation/index.md
+      - Experiment Lifecycle: explanation/experiment-lifecycle.md
+      - Configuration Design: explanation/configuration-design.md
+      - Branch Strategies: explanation/branch-strategies.md
+      - Context Isolation: explanation/context-isolation.md
+      - Async Model: explanation/async-model.md
+      - Registry Pattern: explanation/registry-pattern.md
+      - Why Decorators: explanation/why-decorators.md
+      - Configuration Injection: explanation/configuration-injection.md
+      - Variant Execution: explanation/variant-execution.md
+      - MLflow Integration: explanation/mlflow-integration.md
+      - OpenTelemetry Support: explanation/opentelemetry-support.md
+      - Nested Experiments: explanation/nested-experiments.md
+      - Thread Safety: explanation/thread-safety.md
+      - Performance: explanation/performance.md
+  - Contributing: CONTRIBUTING.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/spearmint-framework/spearmint-framework
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/spearmint-framework/
+  analytics:
+    provider: google
+    property: !ENV GOOGLE_ANALYTICS_KEY
+
+copyright: Copyright &copy; 2026 Bill DeRusha
