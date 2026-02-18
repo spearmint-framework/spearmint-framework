@@ -33,11 +33,13 @@ def strategy(*args, **kwargs) -> tuple[Config, list[Config]]:
 
 **Example:**
 ``````python
+from spearmint import Spearmint, Config
+
 def my_strategy(*args, **kwargs):
     configs = get_all_configs()
     return configs[0], configs[1:]  # First is primary
 
-mint = Spearmint(branch_strategy=my_strategy, configs=[...])
+mint = Spearmint(branch_strategy=my_strategy, configs=[{"model": "gpt-4"}])
 ``````
 
 ### `configs`
@@ -52,6 +54,8 @@ Configuration sources. Accepts:
 
 **Examples:**
 ``````python
+from spearmint import Spearmint, Config
+
 # Dictionary configs
 mint = Spearmint(configs=[{"model": "gpt-4"}])
 
@@ -93,6 +97,8 @@ def experiment(
 
 **Usage:**
 ``````python
+from spearmint import Spearmint, Config
+
 mint = Spearmint(configs=[{"model": "gpt-4"}])
 
 @mint.experiment()
@@ -113,6 +119,11 @@ def other_function(config: Config) -> str:
 
 **Async Support:**
 ``````python
+import asyncio
+from spearmint import Spearmint, Config
+
+mint = Spearmint(configs=[{"model": "gpt-4"}])
+
 @mint.experiment()
 async def async_generate(prompt: str, config: Config) -> str:
     await asyncio.sleep(0.1)
@@ -144,6 +155,10 @@ def run(
 
 **Usage:**
 ``````python
+from spearmint import Spearmint, Config
+
+mint = Spearmint(configs=[{"model": "gpt-4"}])
+
 @mint.experiment()
 def my_function(prompt: str, config: Config) -> str:
     return f"Result: {prompt}"
@@ -183,6 +198,11 @@ async def arun(
 
 **Usage:**
 ``````python
+import asyncio
+from spearmint import Spearmint, Config
+
+mint = Spearmint(configs=[{"model": "gpt-4"}])
+
 @mint.experiment()
 async def async_function(prompt: str, config: Config) -> str:
     await some_async_call()

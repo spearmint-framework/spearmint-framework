@@ -174,10 +174,12 @@ asyncio.run(main())
 Yes! Use `Spearmint.run()` or `Spearmint.arun()` with any function:
 
 ``````python
+from spearmint import Spearmint, Config
+
 def my_function(prompt: str, config: Config) -> str:
     return f"Output with {config}"
 
-mint = Spearmint(configs=[{...}])
+mint = Spearmint(configs=[{"model": "gpt-4"}])
 
 with mint.run(my_function) as runner:
     result = runner("test")
@@ -192,6 +194,10 @@ Don't use Spearmint! For simple parameter passing, use regular function argument
 Yes, pass `configs` to the decorator:
 
 ``````python
+from spearmint import Spearmint, Config
+
+mint = Spearmint(configs=[{"model": "gpt-4"}])
+
 @mint.experiment(configs=[{"new": "config"}])
 def my_function(config: Config) -> str:
     return config["new"]
