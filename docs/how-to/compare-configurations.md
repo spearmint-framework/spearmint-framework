@@ -290,9 +290,10 @@ def limited_parallel_strategy(*args, **kwargs):
     all_configs = get_configs()
     return all_configs[0], all_configs[1:3]
 
+# Example with many configs
 mint = Spearmint(
     branch_strategy=limited_parallel_strategy,
-    configs=[...100 configs...]
+    configs=[{"model": f"variant-{i}"} for i in range(100)]
 )
 ``````
 
