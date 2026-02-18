@@ -91,6 +91,13 @@ for variant in results.variant_results:
 Variants capture exceptions without failing the primary:
 
 ``````python
+from spearmint import Spearmint, Config
+
+mint = Spearmint(configs=[
+    {"model": "gpt-4"},
+    {"model": "experimental"}
+])
+
 @mint.experiment()
 def risky_function(config: Config) -> str:
     if config["model"] == "experimental":
@@ -151,6 +158,7 @@ with Spearmint.run(score_response, await_variants=True) as runner:
 
 ``````python
 import pandas as pd
+from spearmint import Spearmint, Config
 
 configs = [
     {"model": "gpt-4", "temp": 0.7},
@@ -202,7 +210,10 @@ print(df.pivot_table(
 For async functions, use `Spearmint.arun()`:
 
 ``````python
-mint = Spearmint(configs=[...])
+import asyncio
+from spearmint import Spearmint, Config
+
+mint = Spearmint(configs=[{"model": "gpt-4"}, {"model": "gpt-3.5-turbo"}])
 
 @mint.experiment()
 async def async_generate(prompt: str, config: Config) -> str:
@@ -217,7 +228,6 @@ async def main():
         for variant in results.variant_results:
             print("VARIANT:", variant.result)
 
-import asyncio
 asyncio.run(main())
 ``````
 
@@ -227,8 +237,9 @@ Compare configs across a dataset:
 
 ``````python
 import jsonlines
+from spearmint import Spearmint, Config
 
-mint = Spearmint(configs=[...])
+mint = Spearmint(configs=[{"model": "gpt-4"}, {"model": "gpt-3.5-turbo"}])
 
 @mint.experiment()
 def process_item(text: str, config: Config) -> dict:
@@ -272,6 +283,8 @@ print(df.groupby("config_id")["result"].describe())
 For many configs, consider custom strategies:
 
 ``````python
+from spearmint import Spearmint, Config
+
 def limited_parallel_strategy(*args, **kwargs):
     """Only run first 3 configs."""
     all_configs = get_configs()
@@ -288,6 +301,8 @@ mint = Spearmint(
 ### Pattern 1: Champion/Challenger
 
 ``````python
+from spearmint import Spearmint, Config
+
 mint = Spearmint(configs=[
     {"name": "champion", "model": "gpt-4"},
     {"name": "challenger", "model": "gpt-5-beta"}
@@ -304,6 +319,8 @@ result = production_call("user query")
 ### Pattern 2: A/B/C Testing
 
 ``````python
+from spearmint import Spearmint
+
 mint = Spearmint(configs=[
     {"variant": "A", "algorithm": "v1"},
     {"variant": "B", "algorithm": "v2"},

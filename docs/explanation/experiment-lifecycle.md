@@ -13,6 +13,8 @@ When you decorate a function with `@experiment` and call it, Spearmint executes 
 Happens once when the module is imported.
 
 ``````python
+from spearmint import Spearmint, Config
+
 mint = Spearmint(configs=[{"model": "gpt-4"}])
 
 @mint.experiment()  # <-- Decoration happens here
@@ -202,7 +204,10 @@ T+204ms: User receives result
 Each execution gets isolated context:
 
 ``````python
+from spearmint import Spearmint, Config
 from spearmint.context import current_experiment_case
+
+mint = Spearmint(configs=[{"model": "gpt-4"}])
 
 @mint.experiment()
 def inner(config: Config) -> str:
@@ -226,6 +231,11 @@ def outer(config: Config) -> str:
 Async functions follow the same lifecycle with async-specific handling:
 
 ``````python
+import asyncio
+from spearmint import Spearmint, Config
+
+mint = Spearmint(configs=[{"model": "gpt-4"}])
+
 @mint.experiment()
 async def async_generate(prompt: str, config: Config) -> str:
     await asyncio.sleep(0.1)
@@ -234,6 +244,7 @@ async def async_generate(prompt: str, config: Config) -> str:
 # Lifecycle
 async def main():
     result = await async_generate("Hello")  # Async wrapper
+    print(result)
     
 asyncio.run(main())
 ``````
@@ -249,6 +260,10 @@ asyncio.run(main())
 Exceptions are captured and stored:
 
 ``````python
+from spearmint import Spearmint, Config
+
+mint = Spearmint(configs=[{"model": "gpt-4"}])
+
 @mint.experiment()
 def failing_func(config: Config) -> str:
     raise ValueError("Something went wrong")
