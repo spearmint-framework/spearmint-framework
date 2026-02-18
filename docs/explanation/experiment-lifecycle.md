@@ -57,6 +57,7 @@ result = generate("Hello")  # <-- Call happens here
 ``````python
 with run_experiment(func) as runner:
     # Runner setup happens here
+    pass
 ``````
 
 1. **Retrieve ExperimentFunction:** Look up in registry by function qualname
